@@ -1,0 +1,12 @@
+# UI 自律品質担保の対象アプリ（L1 e2e 必須）
+#
+# このリストに含まれるアプリ配下の UI 変更を含む PR で、
+# Playwright e2e（L1: golden path）が必須となる（auto-merge のブロック条件）。
+# UI 変更判定の対象拡張子・除外パスは scripts/claude-hooks/lib/ui-change-detect.sh を参照。
+#
+# 追加方法: 1 行 1 アプリ（apps/ プレフィックス付き）。# で始まる行と空行はコメント扱い。
+# 空（コメントのみ）の場合、UI 変更判定は常に「変更なし」となり e2e 必須化は無効。
+#
+# 例:
+# apps/web
+# apps/admin

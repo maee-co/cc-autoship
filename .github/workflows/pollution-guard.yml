@@ -1,0 +1,14 @@
+name: Pollution Guard
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pollution guard
+        run: ./scripts/pollution-guard.sh

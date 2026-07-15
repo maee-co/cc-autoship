@@ -1,0 +1,11 @@
+# auto-merge が「公開コンテンツ」とみなし自動マージをブロックするパス。
+# 各行は「完全一致」（例: README.md）または「<path>/ 配下」（例: apps/site）で判定される。
+# trailing slash 付き前方一致のため <path>-clone のような誤検知は起きない。
+# コメント行（#）・空行は無視される。
+#
+# 環境変数 PUBLIC_CONTENT_PATHS_FILE でこのファイルのパス自体を上書きも可能。
+# 空（コメントのみ）の場合、公開コンテンツ判定は常に通過する（ブロックしない）。
+#
+# 例:
+# README.md
+# apps/landing-page

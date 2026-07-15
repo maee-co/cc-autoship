@@ -1,0 +1,19 @@
+{
+  "name": "cc-autoship-marketplace",
+  "owner": {
+    "name": "maee-co"
+  },
+  "metadata": {
+    "description": "Turn AI's development work into a traceable, reviewable asset on GitHub.",
+    "version": "0.1.12"
+  },
+  "plugins": [
+    {
+      "name": "cc-autoship",
+      "source": "./",
+      "description": "Turn AI's development work into a traceable, reviewable asset on GitHub. AI の稼働を Issue・PR・diff・レビューとして GitHub に残し、追跡可能な資産に変える Claude Code 向けハーネス群。",
+      "version": "0.1.12",
+      "strict": false
+    }
+  ]
+}

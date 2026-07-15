@@ -1,0 +1,5 @@
+# cc-autoship の資金提供リンク（#1147・方針 A: FUNDING.yml のみ・README バッジは付けない）
+#
+# 反映は公開当日（#1195）。GitHub Sponsors（maee-co）を有効化している場合は下の github 行が有効になる。
+# 未有効の場合は public 反映前に CEO が GitHub Sponsors 設定を確認する（有効化前に出すと導線が 404 になるため）。
+github: [maee-co]
