@@ -35,14 +35,29 @@ if [ -z "$COMMAND" ]; then
   exit 0
 fi
 
-# gh pr comment コマンドを検知（{ISSUE-ID}: 引用符内・echo/grep 引数での出現は除外する純関数を使用）
-if ! is_gh_pr_comment_command "$COMMAND"; then
+# 検知対象コマンド: review-verdict-post.sh（#1527 Phase 2・**正規経路**）または gh pr comment（従来）
+# （{ISSUE-ID}: 引用符内・echo/grep 引数での出現は除外する純関数を使用）
+# Note(#1815): 旧実装は gh pr comment しか見ておらず、#1527 の RVP 化に追随漏れしていた。
+#   スクリプト経由の投稿は gh 呼び出しがスクリプト内部で起きるため PostToolUse からは見えず、
+#   /review が正規経路で投稿すると本 hook が発火しない（= セキュリティ修正 PR でも Codex 二次
+#   レビューが**黙って**走らない）。auto-merge hook の IS_RVP 分岐と対称に、スクリプト実行
+#   コマンド自体を「レビュー結果コメント投稿」として扱う。
+IS_RVP=0
+if is_review_verdict_post_command "$COMMAND"; then
+  IS_RVP=1
+elif ! is_gh_pr_comment_command "$COMMAND"; then
   exit 0
 fi
 
-# 検知対象テキスト = コマンド文字列 + （あれば）body-file の中身（{ISSUE-ID}）
-# --body inline / --body-file <path> 双方で見出し・マーカーを拾えるようにする
-DETECT_TEXT=$(rc_resolve_detection_text "$COMMAND" "$CWD")
+if [ "$IS_RVP" = "1" ]; then
+  # スクリプトは常に「## レビュー結果」見出しで投稿する（lib/review-verdict.sh の compose が付与）。
+  # Codex 自身の投稿は gh pr comment 経由のため、下段の自己除外ガードは②側でのみ効けばよい。
+  DETECT_TEXT="## レビュー結果"
+else
+  # 検知対象テキスト = コマンド文字列 + （あれば）body-file の中身（{ISSUE-ID}）
+  # --body inline / --body-file <path> 双方で見出し・マーカーを拾えるようにする
+  DETECT_TEXT=$(rc_resolve_detection_text "$COMMAND" "$CWD")
+fi
 
 # レビュー結果コメントの "見出し" パターンを厳密にマッチ（SSoT: lib/review-comment.sh）
 if ! rc_has_review_heading "$DETECT_TEXT"; then
@@ -55,10 +70,25 @@ if printf '%s' "$DETECT_TEXT" | grep -qF 'codex-secondary-review:'; then
   exit 0
 fi
 
-# PR 番号を抽出（auto-merge-after-review.sh と同じ 3 パターン + branch 推論・{ISSUE-ID} Phase 3 B-3）
+# PR 番号を抽出（auto-merge-after-review.sh と同じパターン + branch 推論・{ISSUE-ID} Phase 3 B-3）
 PR_NUM=""
+# パターン 0: review-verdict-post.sh <PR#>（第 1 引数・#1527 Phase 2、#1815 で本 hook にも追加）
+# 注: 配布対象ファイルで Issue を参照するときは半角スペース + `#` を挟まない（`・#1527` /
+#     `、#1815` のように全角区切りで繋ぐ）。配布先の pollution-guard が ' #[0-9]+' を
+#     内部 Issue 番号の漏洩として検知し、sync が止まるため。`PR #N` / `Issue #N` の
+#     形は manifest の transform が `#N` へ置換するので従来どおり書いてよい。
+if [ "$IS_RVP" = "1" ]; then
+  PR_NUM=$(printf '%s' "$COMMAND" | grep -oE 'review-verdict-post\.sh["'"'"'[:space:]]+[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+  # review.md の正規テンプレは locate 後に変数実行（bash "$RVP" <PR#>）するため、リテラル名の
+  # 直後に番号が来ない。$RVP / ${RVP} 変数実行形からも第 1 引数を拾う（#1531 Major 1）
+  if [ -z "$PR_NUM" ]; then
+    PR_NUM=$(printf '%s' "$COMMAND" | grep -oE '(bash[[:space:]]+)?"?\$\{?RVP\}?"?[[:space:]]+[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+  fi
+fi
 # パターン 1: gh pr comment 直後の数字
-PR_NUM=$(printf '%s' "$COMMAND" | grep -oE 'gh pr comment[[:space:]]+[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+if [ -z "$PR_NUM" ]; then
+  PR_NUM=$(printf '%s' "$COMMAND" | grep -oE 'gh pr comment[[:space:]]+[0-9]+' | grep -oE '[0-9]+' | head -1 || true)
+fi
 # パターン 2: GitHub URL から
 if [ -z "$PR_NUM" ]; then
   PR_NUM=$(printf '%s' "$COMMAND" | grep -oE 'github\.com/[^ ]+/pull/[0-9]+' | grep -oE '[0-9]+$' | head -1 || true)

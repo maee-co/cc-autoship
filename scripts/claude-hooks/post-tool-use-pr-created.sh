@@ -114,17 +114,23 @@ fi
 # Note({ISSUE-ID}): コマンド名をスラッシュ記法で書かず「スキル名を起動」形式にすることで
 #   cc-autoship 等プラグイン経由インストール時のプレフィックス（/cc-autoship:review 等）と
 #   CC 組込コマンドの衝突を回避する（/review は CC 組込 review に shadow される）。
+# Note(#1815): レビュー結果の投稿は必ず review-verdict-post.sh（正規経路）を指し、
+#   手書き `gh pr comment` を名指ししない。/auto-merge への連鎖の検知経路は 2 つあり、
+#   ① スクリプト実行（フラグ signature で検知・言語非依存）② コメント本文（日本語見出しに依存）。
+#   旧文言は② を指示しており commands/review.md の①指示と矛盾していた。hook のリマインドの方が
+#   先に読まれるため②に乗り、英語見出しでは検知されず連鎖が**エラーなく黙って切れる**
+#   （v0.1.15 e2e 実測）。①はスクリプトが見出しと判定節を生成するため英語レビューでも成立する。
 if [ -n "$PR_NUM" ]; then
   REMINDER="${PR_CLASS_LINE}PR #${PR_NUM} が作成されました。以下を **順番に** 実行してください:
 
-1. **最優先**: review スキルを起動（引数: ${REVIEW_ARGS}）（一次レビューを実施し、レビュー結果はスキル手順に従って自分で \`gh pr comment\` 投稿する。スキル手順の外で重ねてレビューコメントを書くと二重投稿になる）
+1. **最優先**: review スキルを起動（引数: ${REVIEW_ARGS}）（一次レビューを実施し、結果は**スキル手順どおり \`review-verdict-post.sh\` で投稿する** — 見出しと判定節はスクリプトが付与し、\`/auto-merge\` への連鎖もこの実行を検知する。手書きのレビューコメントで代替・重複投稿しない）
 2. pr-context-summary スキルを起動（引数: ${SUMMARY_ARGS}）（メンテナ とのやり取り・意思決定サマリを GitHub Issue にコメントとして残し、後続タスクへの方針引き継ぎを可能にします）${WORKFLOW_SCOPE_REMINDER}
 
 順序を守ること: review スキルを後回しにすると一次レビュー欠落のリスクがあります（dev-flow ルール参照）。${PROTECTED_PATH_WARNING}"
 else
   REMINDER="gh pr create が実行されました。以下を **順番に** 実行してください:
 
-1. **最優先**: review スキルを起動（引数: <PR#>）（一次レビュー。結果はスキル手順に従って自分で \`gh pr comment\` 投稿する）
+1. **最優先**: review スキルを起動（引数: <PR#>）（一次レビュー。結果は**スキル手順どおり \`review-verdict-post.sh\` で投稿する** — 手書きのレビューコメントで代替しない）
 2. pr-context-summary スキルを起動（引数: --mode pre-merge --pr <PR#>）（メンテナ とのやり取り・意思決定を GitHub Issue にコメント記録）
 
 順序を守ること: review スキルを後回しにすると一次レビュー欠落のリスクがあります（dev-flow ルール参照）。"

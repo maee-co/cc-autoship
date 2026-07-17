@@ -180,5 +180,5 @@ gh pr comment "$PR_NUM" --body "$BODY"
 
 ## チェーン呼び出し元
 
-- `scripts/claude-hooks/post-tool-use-codex-secondary-review.sh`: Claude `/review` 完了後（`gh pr comment` でレビュー結果見出し検知時）に起動条件を満たした PR で自動呼び出し
+- `scripts/claude-hooks/post-tool-use-codex-secondary-review.sh`: Claude `/review` 完了後（**`review-verdict-post.sh` の実行**＝正規経路、または `gh pr comment` でレビュー結果見出し検知時）に起動条件を満たした PR で自動呼び出し
 - 手動: メンテナ や Claude 自身が `/codex-secondary-review <PR#>` で任意のタイミングで起動可能
