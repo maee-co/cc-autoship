@@ -16,8 +16,13 @@ source "$SCRIPT_DIR/lib/workflow-scope-check.sh"
 source "$SCRIPT_DIR/lib/pr-class.sh"
 # shellcheck source=lib/hook-input.sh
 source "$SCRIPT_DIR/lib/hook-input.sh"
+# protected-paths.sh は core 専用（`[self-improve]` PR の Tier P 判定）で、cc-autoship の
+# 配布キットには同梱しない。不在を許容する（#1808）。無条件 source にすると配布先で
+# 「No such file or directory」となり本 hook が exit 1 で死に、/review リマインドが出ず
+# Issue→PR→review→auto-merge の連鎖が丸ごと止まる（v0.1.14 実害）。
+# 同ディレクトリの improvement-outbox.sh が元から使っている `[ -f ]` ガード形に揃える。
 # shellcheck source=lib/protected-paths.sh
-source "$SCRIPT_DIR/lib/protected-paths.sh"
+[ -f "$SCRIPT_DIR/lib/protected-paths.sh" ] && source "$SCRIPT_DIR/lib/protected-paths.sh"
 
 if ! command -v jq &>/dev/null; then
   exit 0
@@ -86,8 +91,9 @@ fi
 # 判定の実体（オーソリ・最終防衛線）は auto-merge 条件 9（auto-merge-criteria.sh + protected-paths.sh）。
 # 本 hook は早期警告のみ（hook は誤発火回避のため suppress されうるため最終防衛線にしない・design §4.3）。
 # gh 失敗時は fail-open（警告なしで通常フローに劣化。hook を止めない）。
+# protected-paths.sh 不在時（= 配布先）は早期警告自体をスキップする（#1808）。
 PROTECTED_PATH_WARNING=""
-if [ -n "$PR_NUM" ]; then
+if [ -n "$PR_NUM" ] && declare -f has_self_improve_marker_from_body >/dev/null 2>&1; then
   PR_DATA_FOR_GUARD=$(gh pr view "$PR_NUM" --json body,files 2>/dev/null || true)
   if [ -n "$PR_DATA_FOR_GUARD" ]; then
     PR_BODY_FOR_GUARD=$(printf '%s' "$PR_DATA_FOR_GUARD" | jq -r '.body // ""' 2>/dev/null || true)

@@ -27,8 +27,21 @@ PUBLIC_CONTENT_PATHS_FILE="${PUBLIC_CONTENT_PATHS_FILE:-${_AMC_LIB_DIR:-.}/../da
 
 # self-modification guard（{ISSUE-ID} 自己改善ループ Phase 2a・条件 9）。
 # 既に読み込み済みなら再 source しない（readonly 再定義エラーの回避・pr-class.sh と同じ方式）。
-declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1 \
-  || source "${_AMC_LIB_DIR:-.}/protected-paths.sh"
+#
+# protected-paths.sh は **core 専用**（`[self-improve]` PR の Tier P 保護パス判定。既定の
+# データ参照先も `.claude/improvement/protected-paths.txt` と core 固有）で、cc-autoship の
+# 配布キットには同梱しない。よって **不在を許容する**（`[ -f ]` ガード）。
+# 不在時は条件 9 を評価せず N/A 扱いにする（下の auto_merge_evaluate 側で declare -f を確認）。
+# fail-open 方針とも整合する（ゲートが判定できないときはブロックしない）。
+#
+# 無条件 source にすると配布先で「protected-paths.sh: No such file or directory」となり、
+# これを source する post-tool-use-pr-created.sh が exit 1 で死ぬ → /review リマインドが出ず
+# Issue→PR→review→auto-merge の連鎖が丸ごと止まる（#1808・v0.1.14 実害）。
+# 同ディレクトリの improvement-outbox.sh は元から `[ -f ]` ガード形で、そちらが正しい作法。
+if [ -f "${_AMC_LIB_DIR:-.}/protected-paths.sh" ]; then
+  declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1 \
+    || source "${_AMC_LIB_DIR:-.}/protected-paths.sh"
+fi
 
 # Pure: 差分行数とファイル数から判定
 # Args: additions deletions file_count
@@ -960,12 +973,18 @@ evaluate_from_data() {
   # 9. self-modification guard（{ISSUE-ID} 自己改善ループ Phase 2a）。
   # [self-improve] マーカー付き PR（AI 起案の改善 PR）が保護パス（Tier P）に触れていないかを判定。
   # [self-improve] でない通常 PR は N/A で常に OK（既存 dev-flow の実装 PR は保護パスに正当に触れうる）。
-  local self_improve_label="9. self-improve 保護パス非該当（[self-improve] でない・N/A）"
-  if has_self_improve_marker_from_body "$pr_body"; then
-    self_improve_label="9. [self-improve] PR は保護パス非該当"
+  #
+  # protected-paths.sh は core 専用で配布キットには同梱しない（上部の source ガード参照・#1808）。
+  # 不在時（= 配布先）は条件 9 自体を評価せず N/A 扱いにする。cc-autoship の利用者は
+  # `[self-improve]` マーカーも Tier P 保護パスも持たないため、この条件は元々 N/A。
+  if declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1; then
+    local self_improve_label="9. self-improve 保護パス非該当（[self-improve] でない・N/A）"
+    if has_self_improve_marker_from_body "$pr_body"; then
+      self_improve_label="9. [self-improve] PR は保護パス非該当"
+    fi
+    _eval "$self_improve_label" \
+      check_self_improve_protected_paths_from_data "$file_list" "$pr_body"
   fi
-  _eval "$self_improve_label" \
-    check_self_improve_protected_paths_from_data "$file_list" "$pr_body"
 
   if [ "$skipped" -eq 1 ]; then
     echo "## 🤖 /auto-merge 判定結果: ❌ 自動マージ不可"
