@@ -16,6 +16,8 @@ source "$SCRIPT_DIR/lib/workflow-scope-check.sh"
 source "$SCRIPT_DIR/lib/pr-class.sh"
 # shellcheck source=lib/hook-input.sh
 source "$SCRIPT_DIR/lib/hook-input.sh"
+# shellcheck source=lib/protected-paths.sh
+source "$SCRIPT_DIR/lib/protected-paths.sh"
 
 if ! command -v jq &>/dev/null; then
   exit 0
@@ -80,6 +82,26 @@ if [ -n "$PR_NUM" ]; then
   fi
 fi
 
+# self-modification guard 早期警告（{ISSUE-ID} 自己改善ループ Phase 2a・二重化の 1 段目）
+# 判定の実体（オーソリ・最終防衛線）は auto-merge 条件 9（auto-merge-criteria.sh + protected-paths.sh）。
+# 本 hook は早期警告のみ（hook は誤発火回避のため suppress されうるため最終防衛線にしない・design §4.3）。
+# gh 失敗時は fail-open（警告なしで通常フローに劣化。hook を止めない）。
+PROTECTED_PATH_WARNING=""
+if [ -n "$PR_NUM" ]; then
+  PR_DATA_FOR_GUARD=$(gh pr view "$PR_NUM" --json body,files 2>/dev/null || true)
+  if [ -n "$PR_DATA_FOR_GUARD" ]; then
+    PR_BODY_FOR_GUARD=$(printf '%s' "$PR_DATA_FOR_GUARD" | jq -r '.body // ""' 2>/dev/null || true)
+    if has_self_improve_marker_from_body "$PR_BODY_FOR_GUARD" 2>/dev/null; then
+      PR_FILES_FOR_GUARD=$(printf '%s' "$PR_DATA_FOR_GUARD" | jq -r '.files[].path' 2>/dev/null || true)
+      if ! check_protected_paths_from_files "$PR_FILES_FOR_GUARD" 2>/dev/null; then
+        PROTECTED_PATH_WARNING="
+
+⚠️ **self-modification guard 発動**: この PR は \`[self-improve]\` マーカー付きで保護パス（Tier P）に触れています。**\`gh pr edit ${PR_NUM} --add-label ceo-judgment-required\` を実行し、PR 本文に独立行で \`[manual-merge]\` を追記してください**（auto-merge 条件 9 が最終的にブロックしますが、早期可視化のため自分で付与すること）。詳細: \`docs/superpowers/specs/2026-07-06-dev-flow-self-improvement-loop-design.md\` §4"
+      fi
+    fi
+  fi
+fi
+
 # 順序付きリマインド: review スキルを最優先、pr-context-summary スキルを 2 番目、workflow scope を 3 番目（該当時のみ）
 # 両方とも Claude が呼ばないと走らない（hook は instruction のみで自動実行しない）ため、
 # 順序を明示することで review スキル呼び忘れ事故（{ISSUE-ID}）を構造的に防ぐ。
@@ -92,7 +114,7 @@ if [ -n "$PR_NUM" ]; then
 1. **最優先**: review スキルを起動（引数: ${REVIEW_ARGS}）（一次レビューを実施し、レビュー結果はスキル手順に従って自分で \`gh pr comment\` 投稿する。スキル手順の外で重ねてレビューコメントを書くと二重投稿になる）
 2. pr-context-summary スキルを起動（引数: ${SUMMARY_ARGS}）（メンテナ とのやり取り・意思決定サマリを GitHub Issue にコメントとして残し、後続タスクへの方針引き継ぎを可能にします）${WORKFLOW_SCOPE_REMINDER}
 
-順序を守ること: review スキルを後回しにすると一次レビュー欠落のリスクがあります（dev-flow ルール参照）。"
+順序を守ること: review スキルを後回しにすると一次レビュー欠落のリスクがあります（dev-flow ルール参照）。${PROTECTED_PATH_WARNING}"
 else
   REMINDER="gh pr create が実行されました。以下を **順番に** 実行してください:
 

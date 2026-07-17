@@ -23,30 +23,6 @@ Because Issues, PRs, and diffs all live on GitHub, you can see exactly what was 
 
 The author develops cc-autoship with cc-autoship. As of June 2026, a peak week merged 90+ pull requests — with no metered API billing, on a flat-rate subscription (Claude Max 5x or higher recommended) inside GitHub's free tier — alongside 100+ Issue updates that week and 30+ merges on the busiest day (approximate figures, on a Claude Max 5x plan). It has real limits too: on big spikes you fall back to merging by hand — auto plus a human final gate, not full automation. See [Known limitations](#known-limitations).
 
-## Who is this for
-
-- **Engineers building solo with AI — solo founders, indie hackers.** You run parallel Claude sessions and want the work to stay trackable and accountable, not scattered across chat.
-- **People moving from vibe-coding to real shipping.** You've hit the POC ceiling and want a real team's workflow — Issue-driven, TDD, review — baked in, so you can just get on the rails.
-
-## Workflow
-
-```mermaid
-flowchart TD
-    A["'I want X'"] --> B["GitHub Issue<br/>Claude opens it"]
-    B --> C["git worktree<br/>isolated branch"]
-    C --> D["Implement + tests"]
-    D --> E["Pull Request"]
-    E --> F["Primary review<br/>confidence-scored"]
-    F --> G["Codex review (optional)"]
-    G --> H{"Quality gates?<br/>size / scope / review<br/>/ CI / e2e for UI"}
-    H -->|green| I["Auto-merge<br/>squash + delete branch"]
-    H -->|not yet| J["Hold for human<br/>poll and retry"]
-    J -.-> E
-    I --> K["Lands on main<br/>Issue / PR / diff preserved"]
-```
-
-Direct pushes to `main` are blocked — the only path onto `main` is a gated PR.
-
 ## Three pillars
 
 Rather than invent something new, cc-autoship reuses the machinery real teams already develop with — Issues, PRs, reviews. These aren't three separate features but three faces of one idea: *leave a clean, reusable record without waste.*
@@ -55,42 +31,14 @@ Rather than invent something new, cc-autoship reuses the machinery real teams al
 - **Compounding** — changes are grouped into right-sized PRs; only gate-cleared work reaches `main`, so a reviewable, retrospectable record compounds instead of scattering across raw commits.
 - **Sustainable** — no metered GitHub Actions billing; review → comment → fix runs inside a flat-rate subscription (Claude Max 5x or higher recommended) and GitHub's free tier.
 
-## What the mechanism guarantees
+## Who is this for
 
-- **No direct pushes to `main`** — always via a worktree + PR
-- **Gated auto-merge** — only PRs passing size / scope / review / CI (and e2e for UI changes) merge automatically
-- **Public-content guard** — paths you mark as public are never auto-merged
-- **Deterministic checks** — gate logic is tested bash pure functions, not LLM prompts
+- **Engineers building solo with AI — solo founders, indie hackers.** You run parallel Claude sessions and want the work to stay trackable and accountable, not scattered across chat.
+- **People moving from vibe-coding to real shipping.** You've hit the POC ceiling and want a real team's workflow — Issue-driven, TDD, review — baked in, so you can just get on the rails.
 
-## What's bundled
+## Getting started
 
-**Core loop**
-
-| Command / Skill | Role |
-| --- | --- |
-| `/commit-push` | Scope & flow check → review → commit → push, in one shot |
-| `/review` | Senior-level review with confidence scoring (filters false positives); `--fix` auto-applies |
-| `/auto-merge` | Evaluates the gates, squash-merges autonomously, polls until merged |
-| `/checkpoint` | Pause progress to a GitHub Issue and resume it in another session |
-| `/github-issue-impl` | Read a GitHub Issue → investigate → plan → implement |
-| `/pr-context-summary` | Record decisions and context onto the Issue (pre / post-merge) |
-| `/codex-secondary-review` | Opt-in second-pass review by an external model |
-
-**Quality & guardrails**
-
-| Skill | Role |
-| --- | --- |
-| `/monorepo-manager` | Checks scope / flow compliance before commit |
-| `/devils-advocate` | Critically reviews designs and plans (edge cases, assumptions) |
-| `/cc-bestpractice` | Keeps the Claude Code setup aligned with best practices |
-| `/session-retro` | Reviews a session and proposes skill / hook / rule improvements |
-
-Plus **rules** — `dev-flow`, `code-review`, `testing`, `security`, and more — that the hooks enforce.
-
-> [!NOTE]
-> The bundled skills, rules, and commands are written primarily in Japanese, the author's working language. They run fine in sessions of any language, but their prose and prompts are Japanese-centric today. Full English localization is on the roadmap.
-
-## Requirements
+### Requirements
 
 - **[GitHub CLI](https://cli.github.com/) (`gh`), authenticated** — run `gh auth login`. The whole loop drives GitHub (Issues, PRs, merge) through `gh`.
 - **`git`** — for worktrees and branches.
@@ -98,7 +46,7 @@ Plus **rules** — `dev-flow`, `code-review`, `testing`, `security`, and more �
 - *(optional)* **Node.js / `npm`** — only if your project runs JS lint/tests as part of the gates.
 - *(optional)* **[openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)** — enables the optional Codex second-pass review (see [Optional integrations](#optional-integrations)).
 
-## Install
+### Install
 
 Inside a Claude Code session, add the marketplace and install the plugin:
 
@@ -126,6 +74,22 @@ The commands, skills, rules, and hooks are now available in your Claude Code ses
 > then reload. If `/review` or `/auto-merge` ever reports missing scripts, you are almost
 > certainly running a stale install — update and reload first.
 
+### Quick start
+
+In a Claude Code session inside your repo, just say what you want — the loop runs itself:
+
+1. **Describe the work.** Claude opens a GitHub Issue for it (`gh issue create`).
+2. **It implements in a worktree.** An isolated `feat/...` branch, with tests.
+3. **It opens a PR** (`Closes #<issue>`); a hook auto-fires `/review`.
+4. **Gates are evaluated.** Pass size / scope / review / CI (+ e2e for UI) → `/auto-merge` squash-merges and the Issue closes.
+
+You can also drive any step directly: `/github-issue-impl <n>`, `/review`, `/auto-merge`.
+
+> The loop follows [`rules/dev-flow.md`](./rules/dev-flow.md), which the hooks enforce.
+
+> [!TIP]
+> Working across several projects or clients? Set a per-project config dir to keep memory and settings isolated: `export CLAUDE_CONFIG_DIR=~/.claude-project-x` (see [docs/optional-integrations.md](./docs/optional-integrations.md)).
+
 ## Enabling autonomous merge (optional)
 
 By default, Claude Code asks you to confirm before it merges a pull request. To let cc-autoship complete that last step without a prompt — merging PRs that have already passed its gates — grant it permission to run `gh pr merge`. Add this to your `.claude/settings.local.json` (create the file if it does not exist):
@@ -142,21 +106,69 @@ This is a one-time choice you make in your own repo — cc-autoship never edits 
 
 > **Already covered?** If your user-level `~/.claude/settings.json` already allows `gh` broadly (e.g. `Bash(gh:*)`), or a repo you cloned ships this grant in its committed `.claude/settings.json`, `gh pr merge` is already permitted — this step is a no-op. Check with `/permissions` before adding it.
 
-## Quick start
+## How it works
 
-In a Claude Code session inside your repo, just say what you want — the loop runs itself:
+### Workflow
 
-1. **Describe the work.** Claude opens a GitHub Issue for it (`gh issue create`).
-2. **It implements in a worktree.** An isolated `feat/...` branch, with tests.
-3. **It opens a PR** (`Closes #<issue>`); a hook auto-fires `/review`.
-4. **Gates are evaluated.** Pass size / scope / review / CI (+ e2e for UI) → `/auto-merge` squash-merges and the Issue closes.
+```mermaid
+flowchart TD
+    A["'I want X'"] --> B["GitHub Issue<br/>Claude opens it"]
+    B --> C["git worktree<br/>isolated branch"]
+    C --> D["Implement + tests"]
+    D --> E["Pull Request"]
+    E --> F["Primary review<br/>confidence-scored"]
+    F --> G["Codex review (optional)"]
+    G --> H{"Quality gates?<br/>size / scope / review<br/>/ CI / e2e for UI"}
+    H -->|green| I["Auto-merge<br/>squash + delete branch"]
+    H -->|not yet| J["Hold for human<br/>poll and retry"]
+    J -.-> E
+    I --> K["Lands on main<br/>Issue / PR / diff preserved"]
+```
 
-You can also drive any step directly: `/github-issue-impl <n>`, `/review`, `/auto-merge`.
+Direct pushes to `main` are blocked — the only path onto `main` is a gated PR.
 
-> The loop follows [`rules/dev-flow.md`](./rules/dev-flow.md), which the hooks enforce.
+### What the mechanism guarantees
 
-> [!TIP]
-> Working across several projects or clients? Set a per-project config dir to keep memory and settings isolated: `export CLAUDE_CONFIG_DIR=~/.claude-project-x` (see [docs/optional-integrations.md](./docs/optional-integrations.md)).
+**Always on, in any repo:**
+
+- **No direct pushes to `main`** — always via a worktree + PR
+- **Gated auto-merge** — a PR merges only if it clears size (≤500 lines / ≤10 files), a passing review verdict (zero Critical/Major), and dangerous-op checks, and isn't a draft (size alone is waived for the initial PR that adds a whole new app)
+- **Deterministic checks** — gates are tested bash pure functions, not LLM prompts. The passing verdict is not authored by the model that wrote the code
+
+**On top, once you configure them:**
+
+- **Public-content guard** — paths you mark as public are never auto-merged (unset = off)
+- **Scope guard** — holds cross-app / shared-package changes (needs an `apps/` + `packages/` layout)
+- **e2e gate** — UI changes wait on their L1 spec (needs `frontend-apps.txt`)
+- **CI gate** — waits on your CI before merging (a repo with no CI checks doesn't wait)
+
+### What's bundled
+
+**Core loop**
+
+| Command / Skill | Role |
+| --- | --- |
+| `/commit-push` | Scope & flow check → review → commit → push, in one shot |
+| `/review` | Senior-level review with confidence scoring (filters false positives); `--fix` auto-applies |
+| `/auto-merge` | Evaluates the gates, squash-merges autonomously, polls until merged |
+| `/checkpoint` | Pause progress to a GitHub Issue and resume it in another session |
+| `/github-issue-impl` | Read a GitHub Issue → investigate → plan → implement |
+| `/pr-context-summary` | Record decisions and context onto the Issue (pre / post-merge) |
+| `/codex-secondary-review` | Opt-in second-pass review by an external model |
+
+**Quality & guardrails**
+
+| Skill | Role |
+| --- | --- |
+| `/monorepo-manager` | Checks scope / flow compliance before commit |
+| `/devils-advocate` | Critically reviews designs and plans (edge cases, assumptions) |
+| `/cc-bestpractice` | Keeps the Claude Code setup aligned with best practices |
+| `/session-retro` | Reviews a session and proposes skill / hook / rule improvements |
+
+Plus **rules** — `dev-flow`, `code-review`, `testing`, `security`, and more — that the hooks enforce.
+
+> [!NOTE]
+> The bundled skills, rules, and commands are written primarily in Japanese, the author's working language. They run fine in sessions of any language, but their prose and prompts are Japanese-centric today. Full English localization is on the roadmap.
 
 ## Configuration
 
@@ -183,7 +195,7 @@ After the gates pass, `/auto-merge` waits on CI (`gh pr checks --watch --fail-fa
 
 > **Plugin install:** the bundled `scripts/…` files live in the plugin cache, not your repo, and the two config files resolve differently (`public-content-paths.txt` → the cached copy; `frontend-apps.txt` → your repo). Prefer the env overrides above, or create `scripts/claude-hooks/data/frontend-apps.txt` in your repo to turn on e2e gating. See [docs/SETUP.md](./docs/SETUP.md) for details.
 
-> The scope and dangerous-file rules assume an `apps/` + `packages/` (monorepo-ish) layout. On a single-package repo they simply never trigger.
+> The scope rule assumes an `apps/` + `packages/` (monorepo-ish) layout — on a single-package repo it simply never triggers. The dangerous-op rule works on any layout.
 
 ## Layout
 
@@ -210,7 +222,7 @@ See [docs/optional-integrations.md](./docs/optional-integrations.md) for setup. 
 ## Known limitations
 
 - **Spike days need a hand.** When a burst of PRs lands at once, GitHub's free-tier Actions minutes can run dry and CI stalls — on those days you merge the gated PRs by hand. The gates still decide *what* is eligible; you just click the last button.
-- **Monorepo-shaped assumptions.** The scope and dangerous-file gates assume an `apps/` + `packages/` layout. On a single-package repo they never trigger (fail-open) — safe, but you get less scope protection.
+- **Scope protection assumes a monorepo.** The scope gate assumes an `apps/` + `packages/` layout. On a single-package repo it never triggers (fail-open). There is no cross-app blast radius to guard there, so nothing is lost in practice — but you don't get the scope protection a monorepo would give you.
 - **Japanese-centric prose.** As noted above, the bundled skills / rules / commands are written primarily in Japanese. English localization is on the roadmap.
 
 ## License

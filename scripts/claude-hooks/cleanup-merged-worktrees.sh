@@ -78,7 +78,7 @@ cleanup_one() {
     if run_cmd git worktree remove "$worktree_path" 2>/tmp/cleanup-merged-worktrees.err; then
         :
     else
-        echo "  → 通常削除に失敗（$(cat /tmp/cleanup-merged-worktrees.err 2>/dev/null | head -1)）。--force で再試行..."
+        echo "  → 通常削除に失敗（$(head -1 /tmp/cleanup-merged-worktrees.err 2>/dev/null)）。--force で再試行..."
         run_cmd git worktree remove --force "$worktree_path"
     fi
 
@@ -86,12 +86,12 @@ cleanup_one() {
         echo "  → ブランチ削除: $branch"
     else
         local err
-        err="$(cat /tmp/cleanup-merged-worktrees.err 2>/dev/null | head -1)"
+        err="$(head -1 /tmp/cleanup-merged-worktrees.err 2>/dev/null)"
         echo "  → 通常削除失敗: $err — -D で強制削除します"
         if run_cmd git branch -D "$branch" 2>/tmp/cleanup-merged-worktrees.err; then
             echo "  → ブランチ強制削除: $branch"
         else
-            echo "  → ブランチ強制削除失敗: $(cat /tmp/cleanup-merged-worktrees.err 2>/dev/null | head -1)"
+            echo "  → ブランチ強制削除失敗: $(head -1 /tmp/cleanup-merged-worktrees.err 2>/dev/null)"
         fi
     fi
 

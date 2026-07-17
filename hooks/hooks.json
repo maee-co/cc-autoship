@@ -13,6 +13,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/scripts/claude-hooks/pre-tool-use-gh-pr-create.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}\"/scripts/claude-hooks/pre-tool-use-cwd-guard.sh",
+            "timeout": 10
           }
         ]
       }

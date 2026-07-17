@@ -25,6 +25,11 @@ readonly AUTO_MERGE_MAX_FILES=10
 _AMC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
 PUBLIC_CONTENT_PATHS_FILE="${PUBLIC_CONTENT_PATHS_FILE:-${_AMC_LIB_DIR:-.}/../data/public-content-paths.txt}"
 
+# self-modification guard（{ISSUE-ID} 自己改善ループ Phase 2a・条件 9）。
+# 既に読み込み済みなら再 source しない（readonly 再定義エラーの回避・pr-class.sh と同じ方式）。
+declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1 \
+  || source "${_AMC_LIB_DIR:-.}/protected-paths.sh"
+
 # Pure: 差分行数とファイル数から判定
 # Args: additions deletions file_count
 # Returns: 0=OK, 1=NG（理由を stderr に出す）
@@ -952,6 +957,16 @@ evaluate_from_data() {
   _eval "$e2e_label" \
     check_e2e_from_data "$e2e_ui_apps" "$e2e_spec_apps" "$e2e_ci_status" "$e2e_usage"
 
+  # 9. self-modification guard（{ISSUE-ID} 自己改善ループ Phase 2a）。
+  # [self-improve] マーカー付き PR（AI 起案の改善 PR）が保護パス（Tier P）に触れていないかを判定。
+  # [self-improve] でない通常 PR は N/A で常に OK（既存 dev-flow の実装 PR は保護パスに正当に触れうる）。
+  local self_improve_label="9. self-improve 保護パス非該当（[self-improve] でない・N/A）"
+  if has_self_improve_marker_from_body "$pr_body"; then
+    self_improve_label="9. [self-improve] PR は保護パス非該当"
+  fi
+  _eval "$self_improve_label" \
+    check_self_improve_protected_paths_from_data "$file_list" "$pr_body"
+
   if [ "$skipped" -eq 1 ]; then
     echo "## 🤖 /auto-merge 判定結果: ❌ 自動マージ不可"
     echo
@@ -996,8 +1011,25 @@ extract_latest_review_from_pr_data() {
   #     再 /review を必須とする）。見出しパターンの `レビュー指摘` は `レビュー指摘修正結果` を
   #     部分文字列として拾ってしまうため、先に --fix 見出しを持つコメントを明示除外する
   #     （見出し検知 SSoT: lib/review-comment.sh の RC_FIX_RESULT_HEADING_PATTERN と同期）。
+  # {ISSUE-ID}（セキュリティ・作者非検証の封鎖）: レビューコメントは **信頼できる作者**
+  # （自アカウント投稿 or repo write 権限保有者）のもののみを判定根拠にする。作者フィルタが
+  # 無いと、公開/複数貢献者リポで PR にコメント可能な任意の GitHub ユーザーが偽の
+  # `## レビュー結果 … 判定: pass` を投稿でき、last-wins で本物の判定を上書きして悪性 PR を
+  # 自動マージさせられる（監査 deep-audit で実コード実行により再現）。
+  #   - viewerDidAuthor == true: gh 認証中のアカウント（= cc-autoship 実行者）自身の投稿。
+  #   - authorAssociation ∈ {OWNER, MEMBER, COLLABORATOR}: repo に write 権限を持つ作者
+  #     （write があれば元々マージ可能なので信頼境界の内側）。CONTRIBUTOR / NONE /
+  #     FIRST_TIME_CONTRIBUTOR 等の外部作者は除外する。
+  #   - authorAssociation が null（＝フィールド欠落）は後方互換で信頼する。実 gh 出力
+  #     （gh pr view --json comments）は authorAssociation を必ず含むため、この分岐は
+  #     合成/レガシー入力（テスト等）にのみ効き、実運用の攻撃者は欠落を作れない。
   printf '%s' "$pr_data" \
     | jq -r '[.comments[]
+        | select((.viewerDidAuthor == true)
+                 or (.authorAssociation == null)
+                 or (.authorAssociation == "OWNER")
+                 or (.authorAssociation == "MEMBER")
+                 or (.authorAssociation == "COLLABORATOR"))
         | select(.body | test("<!-- codex-secondary-review:") | not)
         | select(.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*レビュー指摘修正結果") | not)
         | select(.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*(レビュー結果|レビュー指摘|一次レビュー)"))

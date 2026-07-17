@@ -5,7 +5,24 @@
 #
 # 役割:
 #   1. セッション終了サマリーを .sessions/ に保存（終了理由付き）
-#   2. マージ済み・close 済みの残存 worktree を検出して additionalContext で通知
+#
+# 出力契約（#1786）: SessionEnd は JSON を返さない。公式仕様上 SessionEnd hook は
+#   "side effects only" で「Any JSON output is ignored」であり、実際に
+#   hookSpecificOutput.additionalContext を返すと Claude Code が
+#   「Hook JSON output validation failed — (root): Invalid input」で拒否する（実観測）。
+#   同形式でも SessionStart は正常に通るため、これは SessionEnd 固有の制約。
+#
+#   以前ここには「マージ済み・close 済みの残存 worktree を検出して additionalContext で
+#   通知する」ブロックがあったが、上記のとおり通知は一度も届いておらず（= 届かない通知）、
+#   毎回の検証エラーだけを生んでいたため除去した。
+#
+#   除去後のカバレッジ（正確に）:
+#     - MERGED 済み worktree → SessionStart（session-start.sh の cleanup_merged_worktrees）が
+#       実際に削除まで行う。
+#     - CLOSED（未マージ close）→ **自動経路は無い**。lib/cleanup-merged-worktrees.sh は
+#       `gh pr list --state merged` 固定で CLOSED を拾わない。CLOSED を含む一括掃除は
+#       standalone の cleanup-merged-worktrees.sh --all のみで、手動実行が必要（#1790 で追跡）。
+#       旧ブロックは CLOSED も検出していたが、通知が届かないため実効カバレッジは元々ゼロだった。
 #
 # 失敗時も Claude を止めないため、常に exit 0
 
@@ -44,43 +61,13 @@ jq -nc \
     commits_in_session: $commits
   }' > "$SESSIONS_DIR/session_end_${TIMESTAMP}.json" 2>/dev/null || true
 
-# --- 残存マージ済み worktree を検出 ---
-# CLAUDE_PROJECT_DIR 起点で .claude/worktrees/ をスキャン
-STALE_HINT=""
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-WT_BASE="$PROJECT_DIR/.claude/worktrees"
-
-if [ -d "$WT_BASE" ] && command -v gh &>/dev/null; then
-  STALE_LIST=""
-  while IFS= read -r wt_path; do
-    [ -z "$wt_path" ] && continue
-    [ ! -d "$wt_path" ] && continue
-
-    # worktree のブランチ名を取得
-    wt_branch=$(cd "$wt_path" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
-    [ -z "$wt_branch" ] && continue
-    [ "$wt_branch" = "main" ] && continue
-
-    # PR 状態を取得（gh 認証無 / PR 未作成は静かにスキップ）
-    pr_state=$(gh pr list --head "$wt_branch" --state all --json state --jq '.[0].state' 2>/dev/null) || continue
-    if [ "$pr_state" = "MERGED" ] || [ "$pr_state" = "CLOSED" ]; then
-      STALE_LIST="${STALE_LIST}- $wt_branch (PR: $pr_state)\n"
-    fi
-  done < <(find "$WT_BASE" -mindepth 1 -maxdepth 2 -type d 2>/dev/null | head -20)
-
-  if [ -n "$STALE_LIST" ]; then
-    STALE_HINT="残存する MERGED/CLOSED 済み worktree:\n${STALE_LIST}\`scripts/claude-hooks/cleanup-merged-worktrees.sh --all\` で一括削除できます。"
-  fi
-fi
-
-# --- additionalContext で通知 ---
-if [ -n "$STALE_HINT" ]; then
-  jq -nc --arg ctx "$STALE_HINT" '{
-    hookSpecificOutput: {
-      hookEventName: "SessionEnd",
-      additionalContext: $ctx
-    }
-  }'
-fi
+# 残存 worktree の検出・通知は行わない（#1786・上記「出力契約」のカバレッジ注記を参照）。
+# MERGED は SessionStart が削除まで行う / CLOSED は自動経路が無く手動掃除（#1790 で追跡）。
+#
+# 副次的な効果: セッション終了ごとの `gh pr list` 呼び出し（worktree 数ぶん）が無くなる。
+# 旧実装は `find -mindepth 1 -maxdepth 2` で worktree のサブディレクトリまで走査しており、
+# サブディレクトリでも git rev-parse が同じブランチを返すため同一ブランチを重複列挙し、
+# さらに `head -20` の上限と相まって大半の worktree に到達しないバグもあった
+# （実測: depth1 = 29 件に対し depth1-2 = 225 件を走査）。
 
 exit 0
