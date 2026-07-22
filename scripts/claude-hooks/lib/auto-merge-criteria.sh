@@ -6,7 +6,7 @@
 
 set -uo pipefail
 
-# 二重 source ガード（source 済みなら再定義せず即 return。readonly 再定義エラーも回避・#1323）
+# 二重 source ガード（source 済みなら再定義せず即 return。readonly 再定義エラーも回避・#N）
 if [ -n "${_AUTO_MERGE_CRITERIA_SH_LOADED:-}" ]; then
   # shellcheck disable=SC2317  # source でなく直接実行されたときのみ return が失敗し || true に到達する
   return 0 2>/dev/null || true
@@ -36,7 +36,7 @@ PUBLIC_CONTENT_PATHS_FILE="${PUBLIC_CONTENT_PATHS_FILE:-${_AMC_LIB_DIR:-.}/../da
 #
 # 無条件 source にすると配布先で「protected-paths.sh: No such file or directory」となり、
 # これを source する post-tool-use-pr-created.sh が exit 1 で死ぬ → /review リマインドが出ず
-# Issue→PR→review→auto-merge の連鎖が丸ごと止まる（#1808・v0.1.14 実害）。
+# Issue→PR→review→auto-merge の連鎖が丸ごと止まる（#N・v0.1.14 実害）。
 # 同ディレクトリの improvement-outbox.sh は元から `[ -f ]` ガード形で、そちらが正しい作法。
 if [ -f "${_AMC_LIB_DIR:-.}/protected-paths.sh" ]; then
   declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1 \
@@ -75,7 +75,7 @@ check_size_from_data() {
 #
 # 上記以外（TS/JS/Python/sh/json/yml 等の実コード）を「実コード側」に集計する。
 # auto-merge のサイズ判定は実コード側のみを 500 行閾値で判定するため、
-# テスト・ドキュメントを厚く書く infra PR が手動マージ待ちになる構造的衝突を回避できる（{ISSUE-ID}）。
+# テスト・ドキュメントを厚く書く infra PR が手動マージ待ちになる構造的衝突を回避できる。
 #
 # 注: `*/references/*` パターンは {ISSUE-ID} レビューで over-inclusive と判定されたため不採用。
 # スキル references/ 配下は実質 .md のみで *.md パターンが既にカバーする一方、
@@ -102,7 +102,7 @@ categorize_diff_lines_from_files() {
   echo "$prod_add $prod_del $td_add $td_del"
 }
 
-# Pure: PR のファイル + ステータス一覧から「新規アプリ初期 PR」候補を判定（{ISSUE-ID}）
+# Pure: PR のファイル + ステータス一覧から「新規アプリ初期 PR」候補を判定
 # Args: file_status_list (改行区切り、各行 "path\tstatus"。status は GitHub API の added/modified/removed/renamed 等)
 # Stdout: 候補アプリパス（例 "apps/aqua-trip"）
 # Returns: 0=候補あり, 1=候補なし
@@ -139,7 +139,7 @@ new_app_candidate_from_files() {
   return 0
 }
 
-# Pure: CI 失敗時に「ローカル検証フォールバック」が許されるかを判定（{ISSUE-ID}）
+# Pure: CI 失敗時に「ローカル検証フォールバック」が許されるかを判定
 # Args: failing_jobs (改行区切り、各行 "check_name\texecuted_steps") file_list (改行区切り)
 # Returns: 0=フォールバック可, 1=不可（理由を stderr）
 #
@@ -249,7 +249,7 @@ _load_public_content_paths() {
 # Args: file_list (改行区切り), paths_file（省略時 $PUBLIC_CONTENT_PATHS_FILE）
 # Returns: 0=OK（公開コンテンツに触れていない）, 1=NG
 #
-# 公開判定パスは data/public-content-paths.txt で外部化（{ISSUE-ID}）。
+# 公開判定パスは data/public-content-paths.txt で外部化。
 # 各パスに対し「完全一致（README.md 等）」または「<path>/ 配下（<path>/* 等）」でマッチ。
 # trailing slash 付き前方一致で <path>-clone のような誤検知を防ぐ。
 check_public_content_from_files() {
@@ -292,7 +292,7 @@ check_public_content_from_files() {
 #   - 現行 4 軸表（| Critical | 95 | ... | 対応 |）の **未解決行**（_has_unresolved_critical_major_row）
 # 旧ゲートは 4 軸表形式にマッチせず「Critical/Major ゼロ」条件が実質無効だった（{ISSUE-ID} A-2）。
 # 解決済み（✅）/ 除外（⏭️ 除外（80未満））/ 別 Issue（📌）の Critical/Major 行はブロックしない
-# （auto-merge を無効化しない）。`⏭️ スキップ` はブロックする（#1198 判断 2・詳細は
+# （auto-merge を無効化しない）。`⏭️ スキップ` はブロックする（#N 判断 2・詳細は
 # _has_unresolved_critical_major_row のコメント）。
 check_review_from_text() {
   local review_text="$1"
@@ -314,7 +314,7 @@ check_review_from_text() {
 }
 
 # Pure: /review 4 軸表（重要度 × 信頼度 × スコープ × 指摘 × 対応）から
-# 「未解決の Critical / Major 行」を検出する（A-2 / {ISSUE-ID}、#1198 Phase 2 判断 2・3）
+# 「未解決の Critical / Major 行」を検出する（A-2 / {ISSUE-ID}、#N Phase 2 判断 2・3）
 # Args: review_text
 # Returns: 0=未解決の Critical/Major 行あり, 1=なし
 #
@@ -323,11 +323,11 @@ check_review_from_text() {
 #     ヘッダ（| 重要度 |）・区切り（|---|）は Critical/Major セルを持たないため自然に除外される。
 #     この重要度セル正規表現は maintenance-quality.sh の quality_count_findings_in_comment と同一
 #     （4 軸表の重要度セル検知の共通イディオム）。
-#   - 判定対象は **対応列（最終セル）のみ**（#1198 判断 3）。行全体マッチだと指摘本文中の
+#   - 判定対象は **対応列（最終セル）のみ**（#N 判断 3）。行全体マッチだと指摘本文中の
 #     ✅ / 📌 に釣られて誤通過するため、末尾の非空セルだけを見る。
 #   - 非ブロック（解決/除外/別 Issue 済み）は 3 パターンに限定:
 #     ✅（完了/修正済み）・⏭️ 除外（80未満 = 誤検知フィルタ済み）・📌（別 Issue）。
-#   - `⏭️ スキップ（理由）` は **未解決として block**（#1198 判断 2。review.md の定義上
+#   - `⏭️ スキップ（理由）` は **未解決として block**（#N 判断 2。review.md の定義上
 #     スキップ = 信頼度 80 以上の実在指摘を見送った状態であり、自動マージは 4 軸表の意味論に
 #     反する。正当なスキップは [manual-merge] で メンテナ マージに回すのが正道 = gate は緩和しない）。
 #     対応列が ⏭️ のみで除外/スキップを判別できない場合もフェイルセーフで block（不明→block）。
@@ -395,6 +395,17 @@ extract_review_verdict_from_text() {
   local review_text="$1"
   [ -z "$review_text" ] && { echo "unknown"; return 0; }
 
+  # 言語不変マーカー <!-- review-verdict: <token> --> を最優先で読む（#N の構造解決・{ISSUE-ID}）。
+  # マーカーがあれば自然言語の見出し・判定節に依存せず verdict を確定できる（英語本文でも成立）。
+  local marker_token
+  marker_token=$(printf '%s' "$review_text" | grep -oE '<!--[[:space:]]*review-verdict:[[:space:]]*(pass|needs-review|fail)[[:space:]]*-->' | head -1 | grep -oE 'pass|needs-review|fail')
+  case "$marker_token" in
+    pass)         echo "pass";   return 0 ;;
+    needs-review) echo "要確認"; return 0 ;;
+    fail)         echo "fail";   return 0 ;;
+  esac
+
+  # フォールバック: マーカー無しの旧コメントは既存の日本語判定節パースで抽出（後方互換）
   local section
   section=$(_extract_judgment_section "$review_text")
   [ -z "$section" ] && { echo "unknown"; return 0; }
@@ -763,7 +774,7 @@ e2e_actions_usage_pct() {
   printf '%s' "$val"
 }
 
-# Wrapper（gh）: PR の failing check ごとに「実行されたステップ数」を列挙（{ISSUE-ID}）
+# Wrapper（gh）: PR の failing check ごとに「実行されたステップ数」を列挙
 # Args: pr_number
 # Stdout: "check_name\texecuted_steps"（改行区切り。取得不能な check は -1）
 # Note: bucket=fail / cancel の check を対象に、対応する workflow run の非 success ジョブの
@@ -794,7 +805,7 @@ ci_unstarted_failing_jobs() {
     | jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | "\(.name)\t\(.link // "")"')
 }
 
-# Pure: statusCheckRollup の長さ 1 観測から「CI 待ち step の次アクション」を分類する（{ISSUE-ID}）
+# Pure: statusCheckRollup の長さ 1 観測から「CI 待ち step の次アクション」を分類する
 # Args: rollup_len（gh の .statusCheckRollup | length。取得失敗時は空文字/非数値）
 #       attempt（現在の試行回数、1 始まり） max_attempts（最大試行回数）
 # Stdout: present | retry | absent
@@ -830,7 +841,7 @@ classify_ci_presence() {
   fi
 }
 
-# Wrapper（gh）: CI 待ち step の前に statusCheckRollup をポーリングし、CI の有無を確定する（{ISSUE-ID}）
+# Wrapper（gh）: CI 待ち step の前に statusCheckRollup をポーリングし、CI の有無を確定する
 # Args: pr_number
 # Stdout: present（CI checks あり → watch へ）| absent（真の CI 未設定 → skip 可）
 # Returns: 常に 0
@@ -860,7 +871,7 @@ auto_merge_wait_ci_presence() {
   echo "present"
 }
 
-# Wrapper（gh/git）: PR が「新規アプリ初期 PR」（サイズ上限免除対象）かを判定（{ISSUE-ID}）
+# Wrapper（gh/git）: PR が「新規アプリ初期 PR」（サイズ上限免除対象）かを判定
 # Args: pr_number
 # Stdout: 1=免除対象, 0=非対象（判定不能はすべて 0 = fail-closed）
 # 判定: new_app_candidate_from_files（全 added × 単一 apps/<app>/）+ 当該アプリが
@@ -897,7 +908,7 @@ auto_merge_new_app_exempt() {
 #
 # additions / deletions は **実コード行数**（テスト/.md 除外後）を渡す。
 # td_additions / td_deletions（任意、省略時 0）はテスト/.md として除外された行数。
-# 0 以外の値が渡された場合、判定ラベルに「テスト/.md XX 行除外」の注釈を付ける（{ISSUE-ID}）。
+# 0 以外の値が渡された場合、判定ラベルに「テスト/.md XX 行除外」の注釈を付ける。
 # e2e_* 引数（任意、{ISSUE-ID}）: UI 変更 PR の e2e enforcement 用。省略時は条件 8 を N/A（UI 変更なし）扱い。
 # new_app_exempt（任意、{ISSUE-ID}）: 1 なら条件 1（サイズ）を新規アプリ初期 PR として免除。
 #   免除フラグは wrapper（auto_merge_evaluate → auto_merge_new_app_exempt）が fail-closed に算出する。
@@ -974,7 +985,7 @@ evaluate_from_data() {
   # [self-improve] マーカー付き PR（AI 起案の改善 PR）が保護パス（Tier P）に触れていないかを判定。
   # [self-improve] でない通常 PR は N/A で常に OK（既存 dev-flow の実装 PR は保護パスに正当に触れうる）。
   #
-  # protected-paths.sh は core 専用で配布キットには同梱しない（上部の source ガード参照・#1808）。
+  # protected-paths.sh は core 専用で配布キットには同梱しない（上部の source ガード参照・#N）。
   # 不在時（= 配布先）は条件 9 自体を評価せず N/A 扱いにする。cc-autoship の利用者は
   # `[self-improve]` マーカーも Tier P 保護パスも持たないため、この条件は元々 N/A。
   if declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1; then
@@ -1013,7 +1024,7 @@ evaluate_from_data() {
 # 注: tail -1 は複数行 body の末尾改行を拾って空文字を返すため jq の `last` を使う
 # 注: Codex 二次レビューコメント（マーカー `<!-- codex-secondary-review:` を持つ）は
 #     脚注に「Claude 一次レビュー が authoritative」を含むため "一次レビュー" にマッチしてしまうが、
-#     本来 Claude 一次レビューではないので除外する（{ISSUE-ID}）
+#     本来 Claude 一次レビューではないので除外する
 extract_latest_review_from_pr_data() {
   local pr_data="$1"
   # 見出しパターンは検知 SSoT（lib/review-comment.sh の RC_REVIEW_HEADING_PATTERN）と
@@ -1025,7 +1036,7 @@ extract_latest_review_from_pr_data() {
   #     アンカーではない（`^` は本文全体の先頭にしかマッチしない）。そのため行頭アンカーは
   #     `(^|\n)` で明示し、見出し文字は `[^#\n]` で同一行に限定する（grep は行指向で SSoT が
   #     暗黙に同一行判定なのに合わせ、`##` 見出しと keyword が別行にまたがる誤マッチも防ぐ）。
-  # 注: `## レビュー指摘修正結果`（--fix コメント）は判定根拠として扱わない（#1198 判断 1。
+  # 注: `## レビュー指摘修正結果`（--fix コメント）は判定根拠として扱わない（#N 判断 1。
   #     判定ステータスを持たないため、gate は「最新の通常レビュー」のみを信頼し --fix 後は
   #     再 /review を必須とする）。見出しパターンの `レビュー指摘` は `レビュー指摘修正結果` を
   #     部分文字列として拾ってしまうため、先に --fix 見出しを持つコメントを明示除外する
@@ -1051,11 +1062,12 @@ extract_latest_review_from_pr_data() {
                  or (.authorAssociation == "COLLABORATOR"))
         | select(.body | test("<!-- codex-secondary-review:") | not)
         | select(.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*レビュー指摘修正結果") | not)
-        | select(.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*(レビュー結果|レビュー指摘|一次レビュー)"))
+        | select((.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*(レビュー結果|レビュー指摘|一次レビュー)"))
+                 or (.body | test("<!--[ \t]*review-verdict:[ \t]*(pass|needs-review|fail)[ \t]*-->")))
       ] | last | .body // ""'
 }
 
-# Pure: コメント一覧テキストから指定見出しの既存コメントの有無を判定（{ISSUE-ID}）
+# Pure: コメント一覧テキストから指定見出しの既存コメントの有無を判定
 # Args: comments_text heading_substring
 # Returns: 0=既存あり（投稿スキップすべき）, 1=既存なし（投稿すべき）
 #

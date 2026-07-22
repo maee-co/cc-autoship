@@ -1,5 +1,5 @@
 #!/bin/bash
-# /auto-merge の実行部を 1 スクリプトに集約したラッパー（#1323 / session-retro 2026-07-07）
+# /auto-merge の実行部を 1 スクリプトに集約したラッパー（#N / session-retro 2026-07-07）
 #
 # 目的: SKILL.md（.claude/commands/auto-merge.md）の「判定 → コメント → CI 待ち →
 #   squash merge → cleanup → Issue クローズ確認」を毎回手書きの複合 Bash で再実行して
@@ -51,7 +51,10 @@ if [ -f "$SCRIPT_DIR/lib/improvement-outbox.sh" ]; then
   source "$SCRIPT_DIR/lib/improvement-outbox.sh"
   _AM_VERDICT=$([ "$JUDGE_EXIT" = "0" ] && echo "pass" || echo "blocked")
   # .body // "" で null body（bot コメント等）による jq エラー（null cannot be matched）を回避する
-  _AM_REVIEW="$(gh pr view "$PR" --json comments --jq '[.comments[] | (.body // "") | select(test("## レビュー結果"))] | last // ""' 2>/dev/null || true)"
+  # 記録用の最新レビュー本文取得も判定ゲートと同じ SSoT（extract_latest_review_from_pr_data）に
+  # 統一する。言語不変マーカー（#N・{ISSUE-ID}）付きの英語レビューも記録でき、作者フィルタ・
+  # fix/codex 除外も一貫する（旧: 日本語見出し固定 jq で英語本文を取りこぼしていた）。
+  _AM_REVIEW="$(extract_latest_review_from_pr_data "$(gh pr view "$PR" --json comments 2>/dev/null || echo '{}')")"
   io_record_pr_outcome "${CLAUDE_PROJECT_DIR:-.}/.sessions" "$PR" "$_AM_VERDICT" "$_AM_REVIEW" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" || true
 fi
 
@@ -80,7 +83,7 @@ else
 $(gh pr checks "$PR" 2>&1 | tail -20)
 \`\`\`
 
-CI 不発（Actions 枠枯渇等）の場合は auto-merge.md ステップ 2.5（ローカル検証フォールバック）を手動で実施すること。CEO の対応待ちです。" >/dev/null || true
+CI 不発（Actions 枠枯渇等）の場合は auto-merge.md ステップ 2.5（ローカル検証フォールバック）を手動で実施すること。メンテナの対応待ちです。" >/dev/null || true
     echo "CI_FAIL: CI 失敗 / タイムアウト。PR #$PR" >&2
     exit 3
   fi
@@ -100,7 +103,7 @@ if [ "$MERGE_STATE" != "MERGED" ]; then
 $MERGE_OUT
 \`\`\`
 
-コンフリクト等の可能性があります。CEO の対応待ちです。" >/dev/null || true
+コンフリクト等の可能性があります。メンテナの対応待ちです。" >/dev/null || true
   echo "MERGE_FAIL: state=${MERGE_STATE}。PR #${PR}" >&2
   exit 4
 fi

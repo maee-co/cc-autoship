@@ -4,15 +4,15 @@
     "name": "maee-co"
   },
   "metadata": {
-    "description": "Turn AI's development work into a traceable, reviewable asset on GitHub.",
-    "version": "0.1.16"
+    "description": "Autonomous Issue → PR → merge for Claude Code on GitHub.",
+    "version": "0.1.19"
   },
   "plugins": [
     {
       "name": "cc-autoship",
       "source": "./",
-      "description": "Turn AI's development work into a traceable, reviewable asset on GitHub. AI の稼働を Issue・PR・diff・レビューとして GitHub に残し、追跡可能な資産に変える Claude Code 向けハーネス群。",
-      "version": "0.1.16",
+      "description": "Autonomous Issue → PR → merge for Claude Code on GitHub. AI が GitHub の Issue 駆動フローをマージまで自律で回すスターターキット。",
+      "version": "0.1.19",
       "strict": false
     }
   ]

@@ -145,6 +145,83 @@ rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
 assert "__tests__/ 内の汚染文字列は除外 (exit 0)" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
 
 # ─────────────────────────────────────────────
+echo "[8] #1814: 全角記号前置の #番号 を検出（旧実装は半角スペース前置のみ）"
+
+HASH="#"
+tmpdir=$(make_tmpdir)
+printf 'gate は最新のみ信頼・%s1198 判断 1\n' "$HASH" > "$tmpdir/rules/msg.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "・#番号（全角中黒前置）を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+printf '反映は公開当日（%s1195）。\n' "$HASH" > "$tmpdir/rules/paren.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "（#番号（全角括弧前置）を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+printf 'color: %s112233; background: %sf0f0f0\n' "$HASH" "$HASH" > "$tmpdir/rules/color.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "6 桁 hex 色はスルー (exit 0)" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+# ─────────────────────────────────────────────
+echo "[9] #1814: private repo URL（github.com/maee-co/core）を検出"
+
+tmpdir=$(make_tmpdir)
+echo "see https://github.com/maee-co/""core/issues/912" > "$tmpdir/rules/url.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "maee-co/core への実 URL を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+echo "dev repo is github.com/maee-co/cc-autoship-dev" > "$tmpdir/rules/devurl.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "cc-autoship-dev 言及はスルー（透明性許容・exit 0）" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+# ─────────────────────────────────────────────
+echo "[10] #1814: 除外リスト方式 — .github/ 等の非列挙ディレクトリも走査する"
+
+tmpdir=$(make_tmpdir)
+mkdir -p "$tmpdir/.github"
+echo "funding: MAE-""123 の手順で" > "$tmpdir/.github/FUNDING.yml"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert ".github/ 配下の汚染を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+mkdir -p "$tmpdir/docs"
+echo "internal ops MAE-""123（release 配置時に除外される内部手順）" > "$tmpdir/docs/repo-meta.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "docs/repo-meta.md は除外（release 非配置・exit 0）" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+mkdir -p "$tmpdir/.claude-plugin"
+printf '{"author": {"name": "Kana Fujisawa"}}\n' > "$tmpdir/.claude-plugin/plugin.json"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert ".claude-plugin/ の author 実名は除外（意図的 attribution・exit 0）" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+printf 'MIT License\n\nCopyright (c) 2026 Kana Fujisawa\n' > "$tmpdir/LICENSE"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "LICENSE の copyright 実名は除外（意図的 attribution・exit 0）" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+# ─────────────────────────────────────────────
+echo "[11] #1814 round 2: fail-close — 実在しない ROOT は ERROR (exit 2)"
+
+rc=$(run_guard_rc "/nonexistent-pollution-guard-root-$$")
+assert "実在しない ROOT は exit 2（PASSED にしない）" "$([ "$rc" -eq 2 ] && echo 0 || echo 1)"
+
+# ─────────────────────────────────────────────
+echo "[12] #1814 round 2: 社内ロール表記を検出、メンテナ表記はスルー"
+
+tmpdir=$(make_tmpdir)
+echo "この操作は C""EO の対応待ちです。" > "$tmpdir/rules/role.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "C""EO 表記を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+echo "この操作はメンテナの対応待ちです。" > "$tmpdir/rules/role.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "メンテナ表記はスルー (exit 0)" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+# ─────────────────────────────────────────────
 echo ""
 echo "Result: passed=$PASS failed=$FAIL"
 if [ "$FAIL" -gt 0 ]; then

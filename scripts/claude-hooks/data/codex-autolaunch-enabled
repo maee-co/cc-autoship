@@ -1,0 +1,12 @@
+# Codex 二次レビュー自動起動ゲート
+#
+# 条件 1（外部 API 連携ファイル変更）/ 条件 2（大規模 PR）/ 条件 4（セキュリティ意図）の
+# **自動**起動を on/off する。条件 3（[codex-review] 明示 opt-in）と opt-out（[no-codex]）は
+# このフラグに関係なく常時有効（scripts/claude-hooks/lib/codex-trigger-criteria.sh 参照）。
+#
+# 既定は off（真の opt-in）: drop-in 先のリポジトリの PR diff を、明示的な
+# [codex-review] タグなしに外部 API（gpt-5-codex）へ送らない（privacy 優先）。
+# 自動起動を有効化したい場合はこのファイルの値を "1" に書き換える（コメント・空行を
+# 除いた最初の行を判定に使う）。または環境変数 CODEX_AUTOLAUNCH=1 を設定する。
+
+0

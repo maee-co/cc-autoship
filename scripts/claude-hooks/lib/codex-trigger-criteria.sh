@@ -9,6 +9,23 @@
 
 set -uo pipefail
 
+# 二重 source ガード（source 済みなら再定義せず即 return。readonly 再定義エラーも回避・
+# auto-merge-criteria.sh / pr-class.sh と同じ方式）
+if [ -n "${_CODEX_TRIGGER_CRITERIA_SH_LOADED:-}" ]; then
+  # shellcheck disable=SC2317  # source でなく直接実行されたときのみ return が失敗し || true に到達する
+  return 0 2>/dev/null || true
+fi
+_CODEX_TRIGGER_CRITERIA_SH_LOADED=1
+
+# source 元（bash: BASH_SOURCE / zsh: $0）相対で sibling lib / data を解決する（配布時の
+# ${CLAUDE_PLUGIN_ROOT} 配置でも正しく効く・P3 パターン踏襲）。
+_CODEXTRIGGER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+
+# 実コード行数の判定（categorize_diff_lines_from_files）を共有し二重管理しない。
+# pr-class.sh が同関数を declare -f ガード付きで source する前例を踏襲（{ISSUE-ID} D-P4-2）。
+declare -f categorize_diff_lines_from_files >/dev/null 2>&1 \
+  || source "${_CODEXTRIGGER_LIB_DIR:-.}/auto-merge-criteria.sh"
+
 # 外部 API 連携キーワード（ファイル名 / パスに含まれる場合に起動条件を満たす）
 readonly CODEX_TRIGGER_KEYWORDS="discord|slack|notion|openai|anthropic|webhook|mcp"
 
@@ -34,12 +51,19 @@ check_keyword_from_files() {
   return 1
 }
 
-# Pure: PR 規模が大規模閾値を超えているかを判定
-# Args: additions deletions file_count
+# Pure: PR 規模が大規模閾値を超えているかを判定（実コード行 + 生ファイル数・{ISSUE-ID} D-P4-2）
+# Args: file_diff_list (改行区切り、各行 "path\tadditions\tdeletions") file_count
 # Returns: 0=大規模（起動条件 2 を満たす）, 1=小規模
+#
+# 行数判定は categorize_diff_lines_from_files（auto-merge-criteria.sh）で実コード行のみを
+# 対象にする（.md・テスト行を除外）。auto-merge のサイズゲート・pr-class.sh と同じ物差しに
+# 統一し、.md 大量追加での誤発火（原設計 A-3・コスト#3）を消す。ファイル数は生カウントのまま。
 check_large_pr_from_data() {
-  local additions="$1" deletions="$2" file_count="$3"
-  local total=$((additions + deletions))
+  local file_diff_list="$1" file_count="$2"
+  local categorized prod_add prod_del
+  categorized=$(categorize_diff_lines_from_files "$file_diff_list")
+  read -r prod_add prod_del _ _ <<< "$categorized"
+  local total=$((prod_add + prod_del))
   if [ "$total" -ge "$CODEX_TRIGGER_LARGE_PR_LINES" ]; then
     return 0
   fi
@@ -97,29 +121,68 @@ check_security_intent_from_text() {
   return 1
 }
 
+# Pure: 自動起動ゲートが有効かを判定（{ISSUE-ID} D-P4-1）
+#
+# 条件 1（外部 API 連携ファイル変更）/ 条件 2（大規模 PR）/ 条件 4（セキュリティ意図）の
+# **自動**起動を on/off する。条件 3（[codex-review] 明示 opt-in）と opt-out（[no-codex]）は
+# このゲートの対象外で環境非依存に常時有効（evaluate_trigger_from_data 側で保証）。
+#
+# 優先順位: 環境変数 CODEX_AUTOLAUNCH（1|0）> data ファイル（CODEX_AUTOLAUNCH_FILE で
+# パス自体を上書き可能。既定は P3 の *_FILE override + fallback パターンと同型）。
+# フラグ未設定・ファイル欠落・不正値は fail-safe で off（privacy 優先）。
+# core はリポジトリに data ファイル "1" を同梱して on を維持（現行挙動に回帰なし）。
+# cc-autoship（drop-in 先の第三者 repo）は既定 off（真の opt-in）。テンプレートは
+# .claude/skills/sync-cc-autoship/templates/codex-autolaunch-enabled を参照。
+# Returns: 0=on, 1=off
+codex_autolaunch_enabled() {
+  if [ -n "${CODEX_AUTOLAUNCH:-}" ]; then
+    [ "$CODEX_AUTOLAUNCH" = "1" ] && return 0
+    return 1
+  fi
+  local flag_file="${CODEX_AUTOLAUNCH_FILE:-${_CODEXTRIGGER_LIB_DIR:-.}/../data/codex-autolaunch-enabled}"
+  [ -f "$flag_file" ] || return 1
+  local val
+  val=$(grep -vE '^[[:space:]]*(#|$)' "$flag_file" 2>/dev/null | head -1 | tr -d '[:space:]')
+  [ "$val" = "1" ] && return 0
+  return 1
+}
+
 # Pure: 起動条件を集約評価
-# Args: file_list additions deletions file_count pr_body [pr_title]
+# Args: file_diff_list（改行区切り、各行 "path\tadditions\tdeletions"） pr_body [pr_title]
 # Returns: 0=起動すべき, 1=起動しない
 # Stdout: 起動理由（条件番号と説明）
 evaluate_trigger_from_data() {
-  local file_list="$1"
-  local additions="$2"
-  local deletions="$3"
-  local file_count="$4"
-  local pr_body="$5"
-  local pr_title="${6:-}"
+  local file_diff_list="$1"
+  local pr_body="$2"
+  local pr_title="${3:-}"
 
-  # opt-out は最優先
+  local file_list file_count
+  file_list=$(printf '%s' "$file_diff_list" | cut -f1)
+  file_count=0
+  while IFS=$'\t' read -r path _ _; do
+    [ -z "$path" ] && continue
+    file_count=$((file_count + 1))
+  done <<< "$file_diff_list"
+
+  # opt-out は最優先（ゲート非依存で環境非依存に常時有効）
   if check_optout_from_body "$pr_body"; then
     echo "opt-out: PR 本文に [no-codex] タグ"
     return 1
   fi
 
-  # 起動条件 OR 評価（最初に満たした条件を理由として返す）
+  # 条件 3（明示 opt-in）はゲート非依存で環境非依存に常時有効（D-P4-1）
   if check_optin_from_body "$pr_body"; then
     echo "条件 3: PR 本文に [codex-review] タグ（明示 opt-in）"
     return 0
   fi
+
+  # 条件 1/2/4 の自動起動は config ゲート配下（D-P4-1）。off なら opt-in/opt-out のみで判定終了。
+  if ! codex_autolaunch_enabled; then
+    echo "起動条件未満（自動起動 off・[codex-review] opt-in のみ有効）"
+    return 1
+  fi
+
+  # 起動条件 OR 評価（最初に満たした条件を理由として返す）
   if check_keyword_from_files "$file_list"; then
     local matched
     matched=$(printf '%s' "$file_list" | grep -iE "(^|/)[^/]*(${CODEX_TRIGGER_KEYWORDS})[^/]*" | head -3 | tr '\n' ' ')
@@ -137,9 +200,12 @@ evaluate_trigger_from_data() {
     echo "条件 4: セキュリティ修正の意図を検知 — ${sec_matched}"
     return 0
   fi
-  if check_large_pr_from_data "$additions" "$deletions" "$file_count"; then
-    local total=$((additions + deletions))
-    echo "条件 2: 大規模 PR (${total} 行 / ${file_count} ファイル)"
+  if check_large_pr_from_data "$file_diff_list" "$file_count"; then
+    local categorized prod_add prod_del
+    categorized=$(categorize_diff_lines_from_files "$file_diff_list")
+    read -r prod_add prod_del _ _ <<< "$categorized"
+    local total=$((prod_add + prod_del))
+    echo "条件 2: 大規模 PR (実コード ${total} 行 / ${file_count} ファイル)"
     return 0
   fi
 
@@ -164,19 +230,15 @@ codex_trigger_evaluate() {
   fi
 
   local pr_data
-  if ! pr_data=$(gh pr view "$pr" --json additions,deletions,files,body,title 2>&1); then
+  if ! pr_data=$(gh pr view "$pr" --json files,body,title 2>&1); then
     echo "gh pr view 失敗: $pr_data" >&2
     return 2
   fi
 
-  local additions deletions file_count file_list pr_body pr_title
-  additions=$(printf '%s' "$pr_data" | jq -r '.additions')
-  deletions=$(printf '%s' "$pr_data" | jq -r '.deletions')
-  file_count=$(printf '%s' "$pr_data" | jq -r '.files | length')
-  file_list=$(printf '%s' "$pr_data" | jq -r '.files[].path')
+  local file_diff_list pr_body pr_title
+  file_diff_list=$(printf '%s' "$pr_data" | jq -r '.files[] | "\(.path)\t\(.additions // 0)\t\(.deletions // 0)"')
   pr_body=$(printf '%s' "$pr_data" | jq -r '.body // ""')
   pr_title=$(printf '%s' "$pr_data" | jq -r '.title // ""')
 
-  evaluate_trigger_from_data \
-    "$file_list" "$additions" "$deletions" "$file_count" "$pr_body" "$pr_title"
+  evaluate_trigger_from_data "$file_diff_list" "$pr_body" "$pr_title"
 }

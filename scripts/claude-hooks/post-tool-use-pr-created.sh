@@ -1,6 +1,6 @@
 #!/bin/bash
 # PostToolUse Hook: gh pr create 検知 → review と pr-context-summary スキルの起動を順序付きで指示（{ISSUE-ID} で 2 hook を統合）
-# Note({ISSUE-ID}): コマンド名をスラッシュ記法ではなく「スキル名を起動」形式にすることで
+# Note: コマンド名をスラッシュ記法ではなく「スキル名を起動」形式にすることで
 #   cc-autoship 等プラグイン経由インストール時のプレフィックス（/cc-autoship:review 等）と
 #   CC 組込コマンドの衝突を回避する（/review は CC 組込 review に shadow される）
 # stdout: Claude 向け structured additionalContext。stderr: 人間オペレーター向け短縮ログ
@@ -17,7 +17,7 @@ source "$SCRIPT_DIR/lib/pr-class.sh"
 # shellcheck source=lib/hook-input.sh
 source "$SCRIPT_DIR/lib/hook-input.sh"
 # protected-paths.sh は core 専用（`[self-improve]` PR の Tier P 判定）で、cc-autoship の
-# 配布キットには同梱しない。不在を許容する（#1808）。無条件 source にすると配布先で
+# 配布キットには同梱しない。不在を許容する（#N）。無条件 source にすると配布先で
 # 「No such file or directory」となり本 hook が exit 1 で死に、/review リマインドが出ず
 # Issue→PR→review→auto-merge の連鎖が丸ごと止まる（v0.1.14 実害）。
 # 同ディレクトリの improvement-outbox.sh が元から使っている `[ -f ]` ガード形に揃える。
@@ -42,10 +42,10 @@ if ! is_gh_pr_create_command "$COMMAND"; then
   exit 0
 fi
 
-# PR 番号を解決（{ISSUE-ID}）: hook 入力の stdout から URL を抽出 → 取れなければ gh pr view でフォールバック。
+# PR 番号を解決: hook 入力の stdout から URL を抽出 → 取れなければ gh pr view でフォールバック。
 # 本番 PostToolUse は `.tool_response.stdout`（公式ドキュメント記載の `.tool_output.stdout` ではない）。
 # 旧実装は `.tool_output.stdout` のみを見ていたため本番で常に空になり、PR_NUM 依存の
-# workflow scope チェック（{ISSUE-ID}）と PR 分類（{ISSUE-ID}）が一度も発火しなかった（#1108/#1115/#1118/#1120）。
+# workflow scope チェックと PR 分類が一度も発火しなかった（#N/#N/#N/#N）。
 # lib/hook-input.sh の pr_num_resolve が tool_response / tool_output 双方を多段フォールバックで吸収し、
 # stdout から取れない場合のみ gh pr view（cwd = PR 作成ブランチの worktree）で解決する。
 # 解決不能時は空 → 従来どおり汎用リマインドに劣化（劣化なし）。
@@ -91,7 +91,7 @@ fi
 # 判定の実体（オーソリ・最終防衛線）は auto-merge 条件 9（auto-merge-criteria.sh + protected-paths.sh）。
 # 本 hook は早期警告のみ（hook は誤発火回避のため suppress されうるため最終防衛線にしない・design §4.3）。
 # gh 失敗時は fail-open（警告なしで通常フローに劣化。hook を止めない）。
-# protected-paths.sh 不在時（= 配布先）は早期警告自体をスキップする（#1808）。
+# protected-paths.sh 不在時（= 配布先）は早期警告自体をスキップする（#N）。
 PROTECTED_PATH_WARNING=""
 if [ -n "$PR_NUM" ] && declare -f has_self_improve_marker_from_body >/dev/null 2>&1; then
   PR_DATA_FOR_GUARD=$(gh pr view "$PR_NUM" --json body,files 2>/dev/null || true)
@@ -110,11 +110,11 @@ fi
 
 # 順序付きリマインド: review スキルを最優先、pr-context-summary スキルを 2 番目、workflow scope を 3 番目（該当時のみ）
 # 両方とも Claude が呼ばないと走らない（hook は instruction のみで自動実行しない）ため、
-# 順序を明示することで review スキル呼び忘れ事故（{ISSUE-ID}）を構造的に防ぐ。
-# Note({ISSUE-ID}): コマンド名をスラッシュ記法で書かず「スキル名を起動」形式にすることで
+# 順序を明示することで review スキル呼び忘れ事故を構造的に防ぐ。
+# Note: コマンド名をスラッシュ記法で書かず「スキル名を起動」形式にすることで
 #   cc-autoship 等プラグイン経由インストール時のプレフィックス（/cc-autoship:review 等）と
 #   CC 組込コマンドの衝突を回避する（/review は CC 組込 review に shadow される）。
-# Note(#1815): レビュー結果の投稿は必ず review-verdict-post.sh（正規経路）を指し、
+# Note(#N): レビュー結果の投稿は必ず review-verdict-post.sh（正規経路）を指し、
 #   手書き `gh pr comment` を名指ししない。/auto-merge への連鎖の検知経路は 2 つあり、
 #   ① スクリプト実行（フラグ signature で検知・言語非依存）② コメント本文（日本語見出しに依存）。
 #   旧文言は② を指示しており commands/review.md の①指示と矛盾していた。hook のリマインドの方が

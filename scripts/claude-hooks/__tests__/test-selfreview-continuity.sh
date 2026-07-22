@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 REVIEW_MD="$ROOT/commands/review.md"
 AM_MD="$ROOT/commands/auto-merge.md"
 
-echo "test-selfreview-continuity: 同一セッション自己承認降格の仕様封じ（{ISSUE-ID}）"
+echo "test-selfreview-continuity: 同一セッション自己承認降格の仕様封じ"
 
 # --- review.md: 判定ステータス定義の節（最初の「**判定ステータス**」以降）にガイドがある ---
 VERDICT_SECTION="$(awk '/\*\*判定ステータス\*\*/{f=1} f{print} f&&/^---$/{exit}' "$REVIEW_MD")"

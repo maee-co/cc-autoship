@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PreToolUse Hook: main / master ブランチでの gh pr create をブロック
 #
-# 背景（{ISSUE-ID}）:
+# 背景:
 #   PR #N 作成時、worktree ではなくリポジトリルート（main ブランチ）で gh pr create を実行し
 #   "No commits between main and main" エラーで失敗 → worktree 内で再実行する手戻りが発生した。
 #   main での直接 commit/push は pre-tool-use.sh でブロック済みだが、gh pr create には同等のガードがなかった。
@@ -62,7 +62,7 @@ if ! is_gh_pr_create_command "$COMMAND"; then
 fi
 
 # worktree への cd を含む場合は通過: `cd <path>.claude/worktrees/... && gh pr create`
-# 判定は lib/command-match.sh の共通純関数 is_worktree_cd_bypass に集約（#883 で DRY 化）。
+# 判定は lib/command-match.sh の共通純関数 is_worktree_cd_bypass に集約（#N で DRY 化）。
 # 危険コマンドとして gh pr create を渡し、「cd worktree が gh pr create より前にある」ときのみ
 # バイパスする。これにより以下のバイパス経路を塞ぐ:
 #   - echo "cd .claude/worktrees/x" && gh pr create        （C-1: 引用符内の文字列）

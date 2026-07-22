@@ -1,5 +1,5 @@
 #!/bin/bash
-# lib/review-comment.sh の純関数テスト（{ISSUE-ID}）
+# lib/review-comment.sh の純関数テスト
 # - rc_extract_body_file_path: --body-file / -F のパス抽出
 # - rc_read_body_file: 絶対 / 相対(cwd→PWD) / tilde / stdin(-) の本文解決
 # - rc_has_review_heading: レビュー結果見出しの検知（SSoT 正規表現）
@@ -124,7 +124,7 @@ else
   assert_eq "ok" "fail" "絵文字付き見出しを検知すべき"
 fi
 
-# rc_is_fix_result_heading: --fix（レビュー指摘修正結果）専用検知（#1198 判断 1）
+# rc_is_fix_result_heading: --fix（レビュー指摘修正結果）専用検知（#N 判断 1）
 if rc_is_fix_result_heading "## レビュー指摘修正結果
 | 1 | Minor | 90 | ..."; then assert_eq "ok" "ok" "## レビュー指摘修正結果 を --fix として検知"; else assert_eq "ok" "fail" "--fix 見出しを検知すべき"; fi
 if rc_is_fix_result_heading "## 🤖 レビュー指摘修正結果"; then assert_eq "ok" "ok" "絵文字付き --fix 見出しも検知"; else assert_eq "ok" "fail" "絵文字付き --fix を検知すべき"; fi
@@ -141,7 +141,7 @@ fi
 
 # {ISSUE-ID} Phase B（spec ケース 15）: light 版レビューコメント（見出し不変 + マーカー）が検知される。
 # 見出しを `## レビュー結果` のまま維持し、2 行目に `<!-- review:light -->` を置く設計が
-# /auto-merge チェーンの見出し検知を壊さないことを固定する（#512/#882 と同型のチェーン不発を防ぐ）。
+# /auto-merge チェーンの見出し検知を壊さないことを固定する（#N/#N と同型のチェーン不発を防ぐ）。
 LIGHT_REVIEW_COMMENT="## レビュー結果
 <!-- review:light -->
 
@@ -187,7 +187,7 @@ else
 fi
 
 # body-file マーカー（codex 自己投稿）も検知対象テキストに乗る
-echo "<!-- codex-secondary-review:PR#42 -->
+echo "<!-- codex-secondary-review:PR#N -->
 ## レビュー結果" > "$RC_TMP/codex-self.md"
 DETECT=$(rc_resolve_detection_text "gh pr comment 42 --body-file $RC_TMP/codex-self.md")
 assert_contains "codex-secondary-review:" "$DETECT" "body-file 内の自己投稿マーカーも検知対象に乗る"
@@ -215,4 +215,21 @@ if rc_has_review_heading "$DETECT"; then
   assert_eq "nodetect" "detect" "読めない body-file では見出し検知しないべき"
 else
   assert_eq "nodetect" "nodetect" "読めない body-file では見出し検知しない"
+fi
+
+# --- 言語不変マーカーで英語見出しも検知（#N の構造解決・{ISSUE-ID}）---
+echo "review-comment: 言語不変判定マーカー検知（#N・{ISSUE-ID}）"
+if rc_has_review_heading "## Review Result
+<!-- review-verdict: pass -->
+English review body"; then
+  assert_eq "detect" "detect" "rc_has_review_heading: 英語見出し+マーカーを検知"
+else
+  assert_eq "detect" "nodetect" "rc_has_review_heading: 英語見出し+マーカーを検知（FAIL）"
+fi
+# マーカー無しの日本語見出しは従来どおり検知（後方互換）
+if rc_has_review_heading "## レビュー結果
+本文"; then
+  assert_eq "detect" "detect" "rc_has_review_heading: 日本語見出しは従来どおり検知"
+else
+  assert_eq "detect" "nodetect" "rc_has_review_heading: 日本語見出し（FAIL）"
 fi

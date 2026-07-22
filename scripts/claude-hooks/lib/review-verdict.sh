@@ -52,6 +52,19 @@ rvp_validate_body() {
   return 0
 }
 
+# Pure: verdict（pass/要確認/fail）→ 言語不変マーカートークン（pass/needs-review/fail）
+# マーカー <!-- review-verdict: <token> --> は言語非依存の機械可読判定（{ISSUE-ID} の構造解決・{ISSUE-ID}）。
+# 検知側（auto-merge-criteria.sh / review-comment.sh）はこれを最優先で読み、見出し・判定節の
+# 自然言語に依存せず verdict を確定できる（英語レビュー本文でも auto-merge 連鎖が成立する）。
+rvp_verdict_to_marker_token() {
+  case "$1" in
+    pass)   echo "pass" ;;
+    要確認) echo "needs-review" ;;
+    fail)   echo "fail" ;;
+    *)      echo "unknown" ;;
+  esac
+}
+
 # Pure: 最終コメントを合成する
 # Args: body verdict critical major tests high_risk light（"light" で light マーカー付与・それ以外は無視）
 # Stdout: 投稿用コメント全文
@@ -62,6 +75,9 @@ rvp_compose_comment() {
     out="$out
 <!-- review:light -->"
   fi
+  # 言語不変の判定マーカーを常時刻印（{ISSUE-ID} の構造解決・{ISSUE-ID}）: 検知側はこれを最優先で読む
+  out="$out
+<!-- review-verdict: $(rvp_verdict_to_marker_token "$verdict") -->"
   local reason=""
   case "$verdict" in
     要確認) reason="。Major 指摘または高リスク論点が残るため、メンテナの確認後にマージ可" ;;

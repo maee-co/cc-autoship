@@ -1,12 +1,12 @@
 #!/bin/bash
-# workflow-scope-check.sh — `.github/workflows/*.{yml,yaml}` の新規追加検知
+# workflow-scope-check.sh — `.github/workflows/*.{yml,yaml}` の新規追加検知（{ISSUE-ID} / {ISSUE-ID} Phase 2）
 #
 # 純関数ライブラリ。テストは scripts/claude-hooks/__tests__/test-workflow-scope-check.sh。
 #
 # 目的:
 #   PR に `.github/workflows/*.{yml,yaml}` の新規ファイル追加が含まれる場合、
 #   OAuth workflow scope 不足で push が失敗する事故（PR #N で実発生）を未然に防ぐため
-#   hook 側で検知して Claude / CEO に gh auth status / gh auth refresh -s workflow を促す。
+#   hook 側で検知して Claude / メンテナに gh auth status / gh auth refresh -s workflow を促す。
 #
 # 関数:
 #   - is_workflow_file <path>: 単一パスが workflow ファイルか判定

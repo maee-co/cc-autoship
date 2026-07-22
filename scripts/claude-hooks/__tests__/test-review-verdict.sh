@@ -141,3 +141,21 @@ rm -rf "$GH_MOCK_DIR2" "$TMPB2"
 # --- pass 後の確認不要ガイダンス（{ISSUE-ID} Phase 3・シンプルプロンプトで AskUserQuestion を出さない） ---
 assert_contains "確認" "$OUT_OK" "post: stdout に確認不要ガイダンスがある"
 assert_contains "マージまでを含む" "$OUT_OK" "post: 依頼スコープ（マージまで）を明示"
+
+# --- 言語不変判定マーカー（{ISSUE-ID} の構造解決・{ISSUE-ID}）---
+echo "test-review-verdict: 言語不変判定マーカー"
+# verdict → 言語不変トークン（pass/needs-review/fail）
+assert_eq "pass"         "$(rvp_verdict_to_marker_token pass)"   "marker token: pass"
+assert_eq "needs-review" "$(rvp_verdict_to_marker_token 要確認)" "marker token: 要確認→needs-review"
+assert_eq "fail"         "$(rvp_verdict_to_marker_token fail)"   "marker token: fail"
+# compose が言語不変マーカーを刻印する（見出し・判定節の自然言語に依存しない機械可読判定）
+assert_contains "<!-- review-verdict: pass -->"         "$OUT_PASS" "compose: pass マーカーを刻印"
+assert_contains "<!-- review-verdict: needs-review -->" "$OUT_YK"   "compose: 要確認→needs-review マーカーを刻印"
+assert_contains "<!-- review-verdict: fail -->"         "$OUT_FAIL" "compose: fail マーカーを刻印"
+# 英語見出し + 判定節なし + マーカーのみでも verdict を抽出（{ISSUE-ID} の実害を構造的に解消）
+EN_MARKER_ONLY="## Review Result
+
+An English review body without any Japanese judgment section.
+
+<!-- review-verdict: fail -->"
+assert_eq "fail" "$(extract_review_verdict_from_text "$EN_MARKER_ONLY")" "統合: 英語本文+マーカーのみで fail 抽出（{ISSUE-ID} 解消）"

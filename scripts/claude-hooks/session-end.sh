@@ -6,7 +6,7 @@
 # 役割:
 #   1. セッション終了サマリーを .sessions/ に保存（終了理由付き）
 #
-# 出力契約（#1786）: SessionEnd は JSON を返さない。公式仕様上 SessionEnd hook は
+# 出力契約（#N）: SessionEnd は JSON を返さない。公式仕様上 SessionEnd hook は
 #   "side effects only" で「Any JSON output is ignored」であり、実際に
 #   hookSpecificOutput.additionalContext を返すと Claude Code が
 #   「Hook JSON output validation failed — (root): Invalid input」で拒否する（実観測）。
@@ -21,7 +21,7 @@
 #       実際に削除まで行う。
 #     - CLOSED（未マージ close）→ **自動経路は無い**。lib/cleanup-merged-worktrees.sh は
 #       `gh pr list --state merged` 固定で CLOSED を拾わない。CLOSED を含む一括掃除は
-#       standalone の cleanup-merged-worktrees.sh --all のみで、手動実行が必要（#1790 で追跡）。
+#       standalone の cleanup-merged-worktrees.sh --all のみで、手動実行が必要（#N で追跡）。
 #       旧ブロックは CLOSED も検出していたが、通知が届かないため実効カバレッジは元々ゼロだった。
 #
 # 失敗時も Claude を止めないため、常に exit 0
@@ -61,8 +61,8 @@ jq -nc \
     commits_in_session: $commits
   }' > "$SESSIONS_DIR/session_end_${TIMESTAMP}.json" 2>/dev/null || true
 
-# 残存 worktree の検出・通知は行わない（#1786・上記「出力契約」のカバレッジ注記を参照）。
-# MERGED は SessionStart が削除まで行う / CLOSED は自動経路が無く手動掃除（#1790 で追跡）。
+# 残存 worktree の検出・通知は行わない（#N・上記「出力契約」のカバレッジ注記を参照）。
+# MERGED は SessionStart が削除まで行う / CLOSED は自動経路が無く手動掃除（#N で追跡）。
 #
 # 副次的な効果: セッション終了ごとの `gh pr list` 呼び出し（worktree 数ぶん）が無くなる。
 # 旧実装は `find -mindepth 1 -maxdepth 2` で worktree のサブディレクトリまで走査しており、

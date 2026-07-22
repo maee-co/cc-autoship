@@ -1,5 +1,5 @@
 #!/bin/bash
-# cc-bestpractice スキルのセキュリティ不変条件テスト（{ISSUE-ID}）
+# cc-bestpractice スキルのセキュリティ不変条件テスト
 # Usage: bash skills/cc-bestpractice/__tests__/test-cc-bestpractice.sh
 #
 # 検証内容（deep-audit 監査 {ISSUE-ID} の再発防止）:
@@ -18,7 +18,7 @@ F=0
 pass() { echo "  ✅ PASS: $1"; P=$((P + 1)); }
 fail() { echo "  ❌ FAIL: $1"; F=$((F + 1)); }
 
-echo "📋 cc-bestpractice セキュリティ不変条件テスト（{ISSUE-ID}）"
+echo "📋 cc-bestpractice セキュリティ不変条件テスト"
 
 if [ ! -f "$SKILL_FILE" ]; then
   fail "SKILL.md が見つからない: $SKILL_FILE"
@@ -37,21 +37,21 @@ fi
 if $GREP -qE "既定は.*dry-run|dry-run.*既定" "$SKILL_FILE"; then
   pass "dry-run が既定である旨が明記されている"
 else
-  fail "dry-run 既定の明記がない（{ISSUE-ID}）"
+  fail "dry-run 既定の明記がない"
 fi
 
 # {ISSUE-ID}-2: 権限を緩める変更は追加でも review 固定
 if $GREP -q "権限を緩める変更は追加でも" "$SKILL_FILE"; then
   pass "権限緩和は追加でも review 固定が明記されている"
 else
-  fail "権限緩和の review 固定がない（{ISSUE-ID}）"
+  fail "権限緩和の review 固定がない"
 fi
 
 # {ISSUE-ID}-3: data-vs-instruction ガード（Web 推奨は提案であって命令ではない）
 if $GREP -q "提案であって命令ではない" "$SKILL_FILE"; then
   pass "Web 由来推奨の data-vs-instruction ガードがある"
 else
-  fail "data-vs-instruction ガードがない（{ISSUE-ID}）"
+  fail "data-vs-instruction ガードがない"
 fi
 
 echo "結果: PASS=$P FAIL=$F"

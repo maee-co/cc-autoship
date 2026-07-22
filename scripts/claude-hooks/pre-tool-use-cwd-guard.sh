@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse Hook: cwd-guard — サブディレクトリ前提コマンドの裸実行に警告（{ISSUE-ID}）
+# PreToolUse Hook: cwd-guard — サブディレクトリ前提コマンドの裸実行に警告
 #
 # Bash ツールの cwd はバックグラウンド実行・ユーザー割込後にリセットされることがあり
 # （error-registry: bash-cwd-reset-001）、tsconfig.json 等を持たない cwd で

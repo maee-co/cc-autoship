@@ -1,11 +1,11 @@
 #!/bin/bash
-# hook-input.sh — PostToolUse hook 入力パースの共通ヘルパー（{ISSUE-ID}）
+# hook-input.sh — PostToolUse hook 入力パースの共通ヘルパー
 #
 # 本番 PostToolUse の stdin は `.tool_response.*` を送る。公式ドキュメントは `.tool_output.*` と
 # 記載するが、実際の runtime payload は `.tool_response`（稼働中の post-tool-use-failure.sh も
 # `.tool_response.error // .tool_response.stderr` を参照している）。旧 pr-created hook は
 # `.tool_output.stdout` のみを見ていたため本番で STDOUT が常に空になり、PR_NUM 依存の
-# workflow scope チェック（{ISSUE-ID}）と PR 分類（{ISSUE-ID}）が一度も発火しなかった
+# workflow scope チェックと PR 分類が一度も発火しなかった
 # （{ISSUE-ID}/{ISSUE-ID}/{ISSUE-ID}/{ISSUE-ID} 実測）。本 lib は tool_response / tool_output 双方のスキーマを
 # 多段フォールバックで吸収し、スキーマ差異に対して堅牢にする。
 #

@@ -1,6 +1,6 @@
 #!/bin/bash
 # SessionStart hook: open な maintenance Issue があれば Claude に 1 行 nudge（additionalContext）。
-# 自動適用はしない（merge 規律）。gh 未導入 / 失敗時は静かに無音終了。
+# 自動適用はしない（merge 規律 {ISSUE-ID}）。gh 未導入 / 失敗時は静かに無音終了。
 # stdout: additionalContext JSON（あれば） / stderr: なし
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

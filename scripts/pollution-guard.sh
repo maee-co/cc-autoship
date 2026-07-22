@@ -1,11 +1,30 @@
 #!/usr/bin/env bash
 # NDA-safe release guard. Greps for mae-specific identifiers.
-# Exit non-zero if any pattern matches under rules/ skills/ commands/ scripts/ templates/.
-
+#
+# 走査は「除外リスト方式」（#N）: .git 等を除いた **全ツリー** を見る。
+# 旧実装の「列挙したディレクトリだけ見る」方式は、新しいトップレベルディレクトリが
+# 増えるたびに穴が空いた（.github/FUNDING.yml の社内オペ手順が PASSED のまま
+# v0.1.12 から公開され続けた実害）。除外は理由が明示できるものだけに絞る:
+#   - .git / node_modules / .sessions … 非配布・ローカル状態
+#   - __tests__            … 意図的なパターン fixture を含む
+#   - .claude-plugin       … plugin.json / marketplace.json の author 実名は意図的な公開 attribution
+#   - LICENSE              … MIT の copyright 行の実名は意図的な公開 attribution
+#   - docs/repo-meta.md    … release 配置時に rl_is_internal_ops_doc が除外する内部手順
+#   - pollution-guard.sh   … 自分自身（パターン定義を含む）
 set -euo pipefail
 
+# バイト単位マッチで決定的にする。多バイト記号（・／（等）前置の #番号 は
+# 継続バイトが [^0-9a-zA-Z_& ] にマッチすることで拾う（#N ③ の全角前置形）。
+export LC_ALL=C
+
 ROOT="${1:-.}"
-SEARCH_DIRS=("rules" "skills" "commands" "scripts" "templates")
+
+# fail-close（#N round 2）: ROOT が実在しないのに grep が 1 件もマッチせず
+# PASSED を返す「検査していないのに PASSED」を塞ぐ（#N 系と同型・8 例目の予防）。
+if [[ ! -d "$ROOT" ]]; then
+  echo "Pollution guard ERROR: root not found: $ROOT" >&2
+  exit 2
+fi
 
 # Patterns that must NEVER appear in released artifacts.
 PATTERNS=(
@@ -26,25 +45,36 @@ PATTERNS=(
   '#ceo-asks'
   # マシン固有絶対パス
   '/Users/mae'
-  # core 内部 PR / Issue 番号コメント（例: ref #654）
-  ' #[0-9]+'
+  # core 内部 PR / Issue 番号（半角スペース前置形。例: ref #N。
+  # {2,4}\b で 6 桁 hex 色（ #112233）を除外）
+  ' #[0-9]{2,4}\b'
+  # 同・全角記号/かな前置形（例: ・#N / （#N / ／#N。#N ③ で素通りした書式）。
+  # 6 桁 hex 色（#112233）は末尾 \b が成立しないためマッチしない
+  '[^0-9a-zA-Z_& ]#[0-9]{2,4}\b'
+  # private repo への実 URL（公開読者には 404。#N ②）
+  'github\.com/maee-co/core\b'
   # メンテナ実名のハードコード（散文中）
   'Kana Fujisawa'
+  # 社内ロール表記（配布物では「メンテナ」表記に統一する。#N round 2:
+  # auto-merge-run.sh の実行時 PR コメント「CEO の対応待ちです」が素通りした）
+  '\bCEO\b'
 )
 
 FAIL=0
-for dir in "${SEARCH_DIRS[@]}"; do
-  [[ -d "$ROOT/$dir" ]] || continue
-  for pattern in "${PATTERNS[@]}"; do
-    # Skip self and test files (__tests__/ contains intentional pattern fixtures)
-    if grep -rEn \
-        --exclude="pollution-guard.sh" \
-        --exclude-dir="__tests__" \
-        "$pattern" "$ROOT/$dir" 2>/dev/null; then
-      echo "POLLUTION: pattern '$pattern' found in $dir/" >&2
-      FAIL=1
-    fi
-  done
+for pattern in "${PATTERNS[@]}"; do
+  if grep -rEnI \
+      --exclude="pollution-guard.sh" \
+      --exclude="repo-meta.md" \
+      --exclude="LICENSE" \
+      --exclude-dir="__tests__" \
+      --exclude-dir=".git" \
+      --exclude-dir="node_modules" \
+      --exclude-dir=".sessions" \
+      --exclude-dir=".claude-plugin" \
+      "$pattern" "$ROOT" 2>/dev/null; then
+    echo "POLLUTION: pattern '$pattern' found" >&2
+    FAIL=1
+  fi
 done
 
 if [[ $FAIL -ne 0 ]]; then

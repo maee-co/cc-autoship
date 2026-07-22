@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# コマンドが操作する「実リポジトリ」を解決する純関数群（{ISSUE-ID}）。
+# コマンドが操作する「実リポジトリ」を解決する純関数群。
 #
 # 背景:
 #   pre-tool-use.sh / pre-tool-use-gh-pr-create.sh の main 保護は core の git HEAD
 #   （= hook 実行 cwd の HEAD）だけを見て判定しており、コマンド内の
 #   `cd <別repo>` / `git -C <path>` / `gh --repo <owner>/<repo>` を解釈しなかった。
 #   このため cc-autoship 等の外部リポジトリでのフィーチャーブランチ作業が
-#   core の main 直コミットと誤判定されてブロックされていた（{ISSUE-ID}）。
+#   core の main 直コミットと誤判定されてブロックされていた。
 #
 # 方針（fail-closed）:
 #   「コマンド内のすべての危険コマンドが、確実に core 以外のリポジトリを対象に

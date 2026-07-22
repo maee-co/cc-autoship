@@ -1,7 +1,7 @@
 {
   "name": "cc-autoship",
-  "version": "0.1.16",
-  "description": "Turn AI's development work into a traceable, reviewable asset on GitHub. AI の稼働を Issue・PR・diff・レビューとして GitHub に残し、追跡可能な資産に変える Claude Code 向けハーネス群。",
+  "version": "0.1.19",
+  "description": "Autonomous Issue → PR → merge for Claude Code on GitHub. AI が GitHub の Issue 駆動フローをマージまで自律で回すスターターキット。",
   "license": "MIT",
   "author": {
     "name": "Kana Fujisawa"

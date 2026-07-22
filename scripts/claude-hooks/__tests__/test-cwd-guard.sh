@@ -1,5 +1,5 @@
 #!/bin/bash
-# cwd-guard.sh のテスト（{ISSUE-ID}）
+# cwd-guard.sh のテスト
 # Bash cwd リセット起因の「裸実行」検知（error-registry: bash-cwd-reset-001）。
 # 純関数（cg_bare_tool / cg_should_warn）と hook スクリプトの JSON 出力を検証する。
 

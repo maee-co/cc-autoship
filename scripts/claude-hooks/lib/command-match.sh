@@ -49,7 +49,7 @@
 #      （cat <<A <<B）は区別済み。デリミタ語は [A-Za-z0-9_]+ のみ対応し、それ以外の記号を
 #      含む語は未検出のまま安全側（旧来どおり過検知）にフォールバックする。
 #   2. 改行をまたぐ引用符（"line1\n...\nline2"）は単一行扱いで除去できない（行単位処理のため）。
-#      ヒアドキュメントと異なり本 Issue（{ISSUE-ID}）のスコープ外（対応案 B 相当・未実装）。
+#      ヒアドキュメントと異なり本 Issueのスコープ外（対応案 B 相当・未実装）。
 #   3. ネストした引用符・$(...) は最外側しか除去・展開しない
 #   2/3 は「実行コマンドとして gh pr create / git commit / git push を含むケース」では
 #   発生しない構造であり、多少の過検知（=ブロック）はユーザー害が小さい（引用符を外せば抜けられる）。
@@ -69,7 +69,7 @@
 #
 # 返値: 0 = 検知、1 = 非検知
 
-# bash -c / sh -c ラップ形の "-c 引数" を展開する（{ISSUE-ID} / {ISSUE-ID}・{ISSUE-ID} / {ISSUE-ID}）。
+# bash -c / sh -c ラップ形の "-c 引数" を展開する。
 # bash -c "gh pr create" の引用符の中身は「リテラル文字列」ではなく「実行されるコマンド」。
 # _cm_strip_quoted は文字列リテラルを削除する設計のため、展開しないと gh pr create を
 # 取りこぼす（{ISSUE-ID} で additionalContext ブロックが出なかった実測原因）。
@@ -91,8 +91,8 @@
 # 対応形:
 #   - shell 直呼び: bash -c / sh -c / zsh -c / dash -c、結合フラグ（-lc 等）、-c 前の
 #     フラグ・引数（-euo pipefail -c）、パス接頭辞（/bin/bash）
-#   - 接頭辞ラップ: env VAR=... / command / sudo / exec / xargs 等の既知 wrapper（{ISSUE-ID}）
-#   - エスケープ引用符: -c 引数内の \" / \\ を跨いで正しい閉じ引用符まで切り出す（{ISSUE-ID}）
+#   - 接頭辞ラップ: env VAR=... / command / sudo / exec / xargs 等の既知 wrapper
+#   - エスケープ引用符: -c 引数内の \" / \\ を跨いで正しい閉じ引用符まで切り出す
 #   - double / single 両方の引用符
 # 既知の制限（未対応・safe 側 or 稀な形）:
 #   - 多段ネスト（bash -c "bash -c '...'"）は最外側のみ展開
@@ -302,7 +302,7 @@ _cm_unwrap_shell_c() {
     }'
 }
 
-# ヒアドキュメント本体を実行セグメントとして誤検知しないよう除去する（{ISSUE-ID} / {ISSUE-ID}）。
+# ヒアドキュメント本体を実行セグメントとして誤検知しないよう除去する。
 #
 # 背景: bash はヒアドキュメント本体（<<EOF ... EOF）を「実行」しない。にもかかわらず
 # _cm_segment_command は改行を区切りとしてセグメント分割するため、本体中に書かれた
@@ -513,13 +513,13 @@ _cm_strip_heredoc_bodies() {
 # - バッククォート `...`:   中身を改行で囲んで残す（コマンド置換、実際に実行される）
 # - コマンド置換 $(...):    中身を改行で囲んで残す（実際に実行される）
 # クォート自体の除去（リテラル文字列の処理）はここでは行わない。
-# クォート除去・語のグルー結合は後段の _cm_tokenize_line が担う（{ISSUE-ID}）。
+# クォート除去・語のグルー結合は後段の _cm_tokenize_line が担う。
 # ネストには対応しない。
 _cm_expand_command_substitution() {
     # shellcheck disable=SC2016
     # $(...) と `...` は中身を改行付きで残す。bash はこれらの中身を実行するため、
     # 文字列リテラル扱いで削除してしまうと main ブロックを迂回できる経路になる（C-1）。
-    # ヒアドキュメント本体の除去（{ISSUE-ID} / {ISSUE-ID}）は $(...) / `...` 展開の**前**に行う。
+    # ヒアドキュメント本体の除去は $(...) / `...` 展開の**前**に行う。
     # 本体地の文が実行セグメントとして誤検知されるのを防ぎつつ、unquoted ヒアドキュメント
     # 内の $(...) / `...`（実際に実行される）は _cm_strip_heredoc_bodies が温存するため、
     # このあとの sed 抽出で通常どおり拾われる。
@@ -550,7 +550,7 @@ _cm_strip_quoted() {
     printf '%s' "${result[*]}"
 }
 
-# 実シェルの単語分割 + クォート除去を模倣する 1 行トークナイザ（{ISSUE-ID}）。
+# 実シェルの単語分割 + クォート除去を模倣する 1 行トークナイザ。
 #
 # 目的: 「サブコマンド語がクォートで分割されているか（git "commit" / gh p"u"sh）」と
 #       「別コマンドの引数値としてクォート文字列が渡されているか（echo "gh pr create"）」を
@@ -750,7 +750,7 @@ is_gh_pr_merge_command() {
 # after-review hook が「レビュー結果コメント投稿」として /auto-merge チェーンに繋ぐための matcher。
 # bash 前置あり/なし・任意のパス前置（repo 相対 / plugin cache 絶対 / 変数展開後の絶対パス）に対応。
 # 引用符内・echo/grep 引数での出現はセグメント判定（_cm_segment_starts_with）が除外する。
-# review-verdict-post.sh の「起動シグネチャ」で検知する（{ISSUE-ID}）。
+# review-verdict-post.sh の「起動シグネチャ」で検知する。
 #
 # review.md「レビュー結果のコメント」の locator は locate 後に **変数実行** する:
 #   REL="scripts/claude-hooks/review-verdict-post.sh"   # 代入（投稿前）
@@ -862,7 +862,7 @@ is_review_verdict_post_command() {
 # 素通りしてしまう。検知側と同じ展開を適用して対称にする（fail-closed）。
 _cm_unwrap_subshells() {
     # shellcheck disable=SC2016
-    # ヒアドキュメント本体の除去（{ISSUE-ID} / {ISSUE-ID}）を _cm_expand_command_substitution と
+    # ヒアドキュメント本体の除去を _cm_expand_command_substitution と
     # 同じ位置（bash -c 展開の後・$(...) / `...` 抽出の前）に揃える（対称性の維持）。
     _cm_unwrap_shell_c "$1" \
         | _cm_strip_heredoc_bodies \
@@ -1099,7 +1099,7 @@ cm_is_main_or_master_branch() {
     esac
 }
 
-# git commit / git push の実行を判定（{ISSUE-ID}）
+# git commit / git push の実行を判定
 # pre-tool-use.sh の main ブロックが素の grep（クォート未対応）で判定していたため、
 # git "commit" / git p"u"sh のようなクォート分割で回避できていた。
 # is_gh_pr_* と同じ「コマンド置換展開 + クォート認識セグメント分割 + 実トークン化 +
@@ -1112,7 +1112,7 @@ is_git_push_command() {
     _cm_segment_starts_with "$1" "git[[:space:]]+push"
 }
 
-# git push によるリモートブランチ削除判定（--delete / -d）+ main/master 除外（{ISSUE-ID}）
+# git push によるリモートブランチ削除判定（--delete / -d）+ main/master 除外
 # pre-tool-use.sh の「main/master の削除は引き続きブロックするが、feature ブランチの
 # 削除は dev-flow 違反でないため許可する」例外ロジックを、トークン化済みセグメントに対して
 # 判定する共通ヘルパーに集約する。生コマンド文字列に対する grep のままだと、
@@ -1145,7 +1145,7 @@ is_git_push_delete_non_main_command() {
     return 1
 }
 
-# bypass 判定専用のストリップ（{ISSUE-ID}）。
+# bypass 判定専用のストリップ。
 # _cm_strip_quoted は「実行される `gh pr create` / `git commit` 等を検知する」目的で
 # $(...) / `...` の中身を温存するが、worktree bypass の判定では逆に
 # **コマンド置換・バッククォートの中身を除去** する。
@@ -1157,7 +1157,7 @@ is_git_push_delete_non_main_command() {
 _cm_strip_for_bypass() {
     local no_subst
     # shellcheck disable=SC2016  # backtick in sed pattern is literal, not bash expansion
-    # ヒアドキュメント本体の除去（{ISSUE-ID} / {ISSUE-ID}）を $(...) / `...` 削除の前に適用する。
+    # ヒアドキュメント本体の除去を $(...) / `...` 削除の前に適用する。
     # 本体中の偽装テキスト（例: 「cd .claude/worktrees/x」という説明文）が
     # found_worktree_cd を誤って立てたり、本体中の説明文が danger_re に誤マッチして
     # バイパス判定を誤らせたりするのを防ぐ（main 保護の bypass 経路を強化する側の変更）。
@@ -1245,7 +1245,7 @@ _cm_seg_may_change_cwd() {
     return 1
 }
 
-# セグメントが「worktree 内滞在を静的保証できる素直な cd」か（{ISSUE-ID}）。
+# セグメントが「worktree 内滞在を静的保証できる素直な cd」か。
 # 先頭が literal cd（プレフィックスなし）かつ _cm_cd_stays_in_worktree が true のときのみ true。
 _cm_seg_is_safe_worktree_cd() {
     local _s="$1"
@@ -1296,7 +1296,7 @@ is_worktree_cd_bypass() {
     local _depth="${3:-0}"
     [ -z "$cmd" ] && return 1
 
-    # C-8（{ISSUE-ID}）: `bash -c '<script>'` ラップは <script> が実行本体なのに、下の
+    # C-8: `bash -c '<script>'` ラップは <script> が実行本体なのに、下の
     # 引用符除去で cd セグメントが不可視になり、worktree 内の正当な commit/push が
     # 誤ブロックされていた（P6 クリーンラン レポート 2）。
     # **全体が単一の bash|sh|zsh -c 呼び出し**で、スクリプトが単純クォート（内部に
@@ -1368,7 +1368,7 @@ is_worktree_cd_bypass() {
 
         # cd .claude/worktrees/ セグメントを検出
         if [[ "$_seg" =~ ^cd[[:space:]]+[^[:space:]]*\.claude/worktrees/ ]]; then
-            # C-9（{ISSUE-ID}）: worktrees 配下に留まる cd のみを worktree 遷移と認める。
+            # C-9: worktrees 配下に留まる cd のみを worktree 遷移と認める。
             # `..` トラバーサル・変数展開（$VAR）で外へ抜けうるパスは found を立てず、
             # 後続の危険コマンドをブロック側へ倒す。判定は found 後の後続 cd 再評価と
             # 共通化（_cm_cd_stays_in_worktree）。正当な worktree パスは `..`/`$` を

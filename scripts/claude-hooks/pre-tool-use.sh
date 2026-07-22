@@ -35,7 +35,7 @@ block_patterns=(
   'TRUNCATE '
   # force push パターン: --force / -f を独立トークン（直後に空白）として要求し、
   # ブランチ名内に偶発的に "-f...-main" を含む通常 push（例: worktree-feat+{ISSUE-ID}-...-main-protection）
-  # が誤発火しないようにする（{ISSUE-ID}）
+  # が誤発火しないようにする
   'git push .*--force .*main( |$)'
   'git push .*--force .*master( |$)'
   'git push .*-f .*main( |$)'
@@ -116,7 +116,7 @@ if printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])-C(=|[[:space:]])'; then
 fi
 
 if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ] || [ "$COMMAND_HAS_DASH_C" = "1" ]; then
-  # 外部リポジトリ判定用に core の toplevel を解決（{ISSUE-ID}）
+  # 外部リポジトリ判定用に core の toplevel を解決
   CORE_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
   # worktree バイパス判定:
   # 「引用符・コマンド置換除去 → セグメント分割 → セグメント先頭が cd .claude/worktrees/」のみ通過。

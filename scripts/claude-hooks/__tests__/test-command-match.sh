@@ -131,10 +131,10 @@ assert_eq "1" "$(match_check is_gh_pr_merge_command 'gh pr list')" \
 assert_eq "1" "$(match_check is_gh_pr_merge_command 'echo "gh pr merge done"')" \
   "echo \"gh pr merge\" は誤検知しない"
 
-# --- bash -c / sh -c ラップ形（{ISSUE-ID}）: 引数の中身は実行されるため検知する ---
+# --- bash -c / sh -c ラップ形: 引数の中身は実行されるため検知する ---
 # bash -c "gh pr create" は二重引用符の中身が「リテラル文字列」ではなく「実行されるコマンド」。
-# _cm_strip_quoted が中身を文字列扱いで削除すると gh pr create を取りこぼす（#1120 で実測）。
-echo "command-match: bash -c / sh -c ラップ形の検知（{ISSUE-ID}）"
+# _cm_strip_quoted が中身を文字列扱いで削除すると gh pr create を取りこぼす（#N で実測）。
+echo "command-match: bash -c / sh -c ラップ形の検知"
 
 assert_eq "0" "$(match_check is_gh_pr_create_command 'bash -c "gh pr create --title x"')" \
   'bash -c "gh pr create" は実行されるため検知する'
@@ -168,7 +168,7 @@ assert_eq "0" "$(match_check is_gh_pr_create_command "$CREATE_NESTED_QUOTE")" \
 # --- bash -c ラップ形: 誤発火回避（過剰マッチさせない・{ISSUE-ID}） ---
 # echo "bash -c '...'" のように、ラップ形そのものが別コマンドの引用符リテラルの中にある場合は
 # 実行されないため検知してはいけない（bash -c を command position でのみ展開することで担保）。
-echo "command-match: bash -c ラップ形の誤発火回避（{ISSUE-ID}）"
+echo "command-match: bash -c ラップ形の誤発火回避"
 
 FALSE_ECHO_DQ=$'echo "bash -c \'gh pr create\'"'
 assert_eq "1" "$(match_check is_gh_pr_create_command "$FALSE_ECHO_DQ")" \
@@ -189,7 +189,7 @@ assert_eq "1" "$(match_check is_gh_pr_create_command 'bash -c "gh issue create"'
   'bash -c "gh issue create"（gh pr ではない）は検知しない'
 
 # --- bash -c ラップ形: comment / merge も共通の _cm_strip_quoted 経由で同時に修正される ---
-echo "command-match: bash -c ラップ形は comment / merge にも波及（{ISSUE-ID}）"
+echo "command-match: bash -c ラップ形は comment / merge にも波及"
 
 assert_eq "0" "$(match_check is_gh_pr_comment_command 'bash -c "gh pr comment 42 --body x"')" \
   'bash -c "gh pr comment" も検知する'
@@ -205,20 +205,20 @@ FALSE_MERGE=$'echo "bash -c \'gh pr merge\'"'
 assert_eq "1" "$(match_check is_gh_pr_merge_command "$FALSE_MERGE")" \
   'echo "bash -c \x27gh pr merge\x27" は検知しない'
 
-# --- 接頭辞ラップ + quote 字句解析すり抜け（{ISSUE-ID} / #1241）---
-# #1237 で単純 bash -c ラップは塞いだが、_cm_unwrap_shell_c の素朴な sed "([^"]*)" では
+# --- 接頭辞ラップ + quote 字句解析すり抜け（{ISSUE-ID} / #N）---
+# #N で単純 bash -c ラップは塞いだが、_cm_unwrap_shell_c の素朴な sed "([^"]*)" では
 #   (a) エスケープ引用符 \" を境界と誤認して -c 引数を途中で打ち切る
 #   (b) command position 前置詞が wrapper（env / command / sudo ...）を許容しない
 # の 2 系統がすり抜けた（Codex 二次レビュー実証・origin/main・bash 3.2.57）。
 # _cm_unwrap_shell_c を bash 3.2 互換の字句解析ループに置換して両方塞ぐ。
-echo "command-match: 接頭辞ラップ + エスケープ引用符の検知（{ISSUE-ID}）"
+echo "command-match: 接頭辞ラップ + エスケープ引用符の検知"
 
 # (a) エスケープ引用符: -c 引数内の \" を跨いで gh pr create を検知する
 P1_ESCAPED=$'bash -c "echo \\"before\\"; gh pr create"'
 assert_eq "0" "$(match_check is_gh_pr_create_command "$P1_ESCAPED")" \
   'bash -c "echo \x5c"before\x5c"; gh pr create"（エスケープ引用符）も検知する'
 
-# シングルクォート複合（#1237 時点で既に検知・回帰ロック）
+# シングルクォート複合（#N 時点で既に検知・回帰ロック）
 assert_eq "0" "$(match_check is_gh_pr_create_command "bash -c 'echo before; gh pr create'")" \
   "bash -c 'echo before; gh pr create'（シングルクォート複合）も検知する"
 
@@ -250,7 +250,7 @@ assert_eq "0" "$(match_check is_gh_pr_create_command 'A=1 B=2 bash -c "gh pr cre
   'A=1 B=2 bash -c "gh pr create"（複数の裸代入接頭辞）も検知する'
 
 # --- {ISSUE-ID}: 過剰マッチ回避（リテラル・非 wrapper 接頭辞・内側エスケープ） ---
-echo "command-match: 接頭辞ラップの誤発火回避（{ISSUE-ID}）"
+echo "command-match: 接頭辞ラップの誤発火回避"
 
 # 内側のエスケープ引用符に閉じた gh pr create は実行されない（bash -c 'echo "gh pr create"' 相当）
 N5_INNER=$'bash -c "echo \\"gh pr create\\""'
@@ -301,7 +301,7 @@ assert_eq "0" "$(match_check is_gh_pr_create_command "$MULTILINE_CMD")" \
 
 # --- Known limitations: 仕様上の検知制限（将来の誤修正を防ぐためテストで契約化） ---
 # 引用符・コマンド置換の sed パターンは単一行限定で、複数行をまたぐ引用符は未対応
-# （#1708 対応案 B 相当・未実装）。ヒアドキュメントは {ISSUE-ID} / #1708 で解消済み
+# （#N 対応案 B 相当・未実装）。ヒアドキュメントは {ISSUE-ID} / #N で解消済み
 # （下記「ヒアドキュメント本体の除去」セクション参照）。
 # 実用上、複数行をまたぐ引用符で gh pr create を実行する正規ケースは存在しないため、
 # 多少誤検知（=ブロック）してもユーザーへの害は小さい（ブロック時は worktree への
@@ -314,12 +314,12 @@ line3"'
 assert_eq "0" "$(match_check is_gh_pr_create_command "$MULTILINE_QUOTED")" \
   "複数行ダブルクォート内に閉じ込められた gh pr create は known limitation で検知（過剰反応）"
 
-# --- ヒアドキュメント本体の除去（{ISSUE-ID} / #1708） ---
-# 実観測: PR #1707 レビュー中に「コミットメッセージ本文の <<EOF ヒアドキュメント内に
+# --- ヒアドキュメント本体の除去（{ISSUE-ID} / #N） ---
+# 実観測: PR #N レビュー中に「コミットメッセージ本文の <<EOF ヒアドキュメント内に
 # 書いたコマンド例」が実行セグメントとして誤検知され、無関係な PR への auto-merge を
 # hook が促した。ヒアドキュメント本体は bash が実行しないため、_cm_strip_heredoc_bodies
 # で除去してから判定する（旧 known limitation はここで解消）。
-echo "command-match: ヒアドキュメント本体の除去（{ISSUE-ID} / #1708）"
+echo "command-match: ヒアドキュメント本体の除去（{ISSUE-ID} / #N）"
 
 HEREDOC_CMD='cat <<EOF
 gh pr create
@@ -354,7 +354,7 @@ docs(infra): レビュー投稿手順を追記
 gh pr comment 123 --body "## レビュー結果"
 EOF'
 assert_eq "1" "$(match_check is_gh_pr_comment_command "$HEREDOC_REAL_COMMIT")" \
-  "#1708 実証そのもの: git commit -F - のヒアドキュメント本体内の gh pr comment 例を誤検知しない"
+  "#N 実証そのもの: git commit -F - のヒアドキュメント本体内の gh pr comment 例を誤検知しない"
 assert_eq "0" "$(match_check is_git_commit_command "$HEREDOC_REAL_COMMIT")" \
   "同じコマンドの git commit -F - 自体（実行される本体）は引き続き検知する"
 
@@ -423,7 +423,7 @@ assert_eq "1" "$(match_check is_gh_pr_create_command "$HEREDOC_MULTI_CMD")" \
 assert_eq "1" "$(match_check is_gh_pr_comment_command "$HEREDOC_MULTI_CMD")" \
   "1 行に連なる複数ヒアドキュメント（2つ目）の本体内も検知しない"
 
-# --- Codex 二次レビュー指摘（PR #1721）: ヒアドキュメント演算子検出の過検知による
+# --- Codex 二次レビュー指摘（PR #N）: ヒアドキュメント演算子検出の過検知による
 # --- fail-open 回帰の再発防止（3 件・すべて「実コマンドが誤って本体扱いで消えて
 # --- 見逃される」class の回帰） ---
 echo "command-match: ヒアドキュメント演算子検出の fail-open 回帰防止（Codex 二次レビュー）"
@@ -660,7 +660,7 @@ assert_eq "0" "$(match_check cm_git_danger_targets_main 'git commit -m "not real
   "同コマンドは実際に main への git commit であるため commit 側では正しく検知する（引用符除去後も本体は残る）"
 
 # --- {ISSUE-ID} 統合: cm_git_danger_targets_main も実トークン化パイプラインで判定する ---
-# main 側（{ISSUE-ID}）の is_git_commit_command と同じ「bash -c 展開 + クォート認識分割 +
+# main 側の is_git_commit_command と同じ「bash -c 展開 + クォート認識分割 +
 # 実トークン化」を cm_git_danger_targets_main が内部で使うことの検証（マージ統合時に追加）。
 # 引用符分割サブコマンド・bash -c ラップのどちらも -C 解決付き判定に到達する。
 echo "command-match: cm_git_danger_targets_main の {ISSUE-ID} 統合（引用符分割・bash -c）"
@@ -718,11 +718,11 @@ assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && 
 assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && git commit -m x && git push')" \
   "C-6 正当ケース: cd worktree 後の -C 無し commit/push は引き続きバイパス可（過剰ブロック防止）"
 
-# --- C-8: bash -c ラップ内の正当な worktree cd（#1466・P6 クリーンラン レポート 2）---
+# --- C-8: bash -c ラップ内の正当な worktree cd（#N・P6 クリーンラン レポート 2）---
 # `bash -c '<script>'` は <script> が実行本体なのに、引用符除去で cd セグメントが
 # 不可視になり正当な worktree コミットが誤ブロックされていた。全体が単一の
 # bash|sh|zsh -c 呼び出しかつ単純クォートの場合に限り 1 段 unwrap して再帰判定する。
-echo "command-match: is_worktree_cd_bypass C-8（bash -c ラップの unwrap・#1466）"
+echo "command-match: is_worktree_cd_bypass C-8（bash -c ラップの unwrap・#N）"
 
 assert_eq "0" "$(match_check is_worktree_cd_bypass "bash -c 'cd .claude/worktrees/x && git commit -m x'")" \
   "C-8: bash -c 単一ラップ内の cd worktree && commit はバイパス可"
@@ -748,11 +748,11 @@ assert_eq "1" "$(match_check is_worktree_cd_bypass "bash -c 'cd .claude/worktree
 assert_eq "1" "$(match_check is_worktree_cd_bypass "bash -c 'cd .claude/worktrees/x && git -C /repo commit -m x'")" \
   "C-8 防御: 内側の C-6（-C main 上書き）も再帰判定で引き続きブロック"
 
-# --- C-9: cd パストラバーサルが worktree ホワイトリストを素通りする穴の封鎖（#1471） ---
+# --- C-9: cd パストラバーサルが worktree ホワイトリストを素通りする穴の封鎖（#N） ---
 # `cd .claude/worktrees/../../..` は `.claude/worktrees/` を含むが、末尾の `..` で
 # worktree の外（main checkout 等）へ抜けるため、後続の commit は main で実行される。
 # `..` パスセグメントを含む cd は worktree 遷移と認めず、保守的にブロック側へ倒す。
-echo "command-match: is_worktree_cd_bypass C-9（cd パストラバーサル封鎖・#1471）"
+echo "command-match: is_worktree_cd_bypass C-9（cd パストラバーサル封鎖・#N）"
 
 assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/../../.. && git commit -m x')" \
   "C-9: .claude/worktrees/ 後の ../../.. で外へ抜ける cd はバイパス不可"
@@ -772,11 +772,11 @@ assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && 
 assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/feat/{ISSUE-ID}-x && git push origin feat/x')" \
   "C-9 回帰: 深い階層の素直な worktree パスもバイパス可"
 
-# --- C-9b: worktree 遷移後に外へ出る cd/pushd を前置バイパスとして封鎖（#1471 Critical・敵対レビュー） ---
+# --- C-9b: worktree 遷移後に外へ出る cd/pushd を前置バイパスとして封鎖（#N Critical・敵対レビュー） ---
 # found_worktree_cd=1 が立った後でも、後続の cd/pushd で worktrees の外（main checkout 等）へ
 # 出れば、そこで実行される git commit/push は main に効く。正当な worktree cd を 1 つ前置して
 # C-9 の単一セグメント判定を迂回する攻撃（`cd wt && cd ../../.. && git commit`）を封鎖する。
-echo "command-match: is_worktree_cd_bypass C-9b（worktree 遷移後の外抜け cd 封鎖・#1471）"
+echo "command-match: is_worktree_cd_bypass C-9b（worktree 遷移後の外抜け cd 封鎖・#N）"
 
 assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && cd .claude/worktrees/../../.. && git commit -m x')" \
   "C-9b: 正当 worktree cd を前置しても、後続の .. 外抜け cd はバイパス不可"
@@ -809,11 +809,11 @@ assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && 
 assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && cd .claude/worktrees/bar && git commit -m x')" \
   "C-9b 回帰: 別 worktree への cd（.. なし）はバイパス可"
 
-# --- C-9c: 変数展開 cd による前置バイパスの封鎖（#1471 Critical・敵対レビュー2巡目） ---
+# --- C-9c: 変数展開 cd による前置バイパスの封鎖（#N Critical・敵対レビュー2巡目） ---
 # `cd $HOME` 等の変数展開は任意ディレクトリ（worktrees 外）へ展開されうるため、worktrees
 # 配下に留まる静的保証がない。found 後の変数 cd も、変数を含む worktrees パスの初期検出も、
 # 安全側でブロックへ倒す（`$(...)` は _cm_strip_for_bypass で既に除去済み・別経路）。
-echo "command-match: is_worktree_cd_bypass C-9c（変数展開 cd の前置バイパス封鎖・#1471）"
+echo "command-match: is_worktree_cd_bypass C-9c（変数展開 cd の前置バイパス封鎖・#N）"
 
 assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && cd $HOME && git commit -m x')" \
   "C-9c: worktree 後の cd \$HOME はバイパス不可"
@@ -833,11 +833,11 @@ assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd $HOME/.claude/worktrees/x
 assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && cd src/lib && git commit -m x')" \
   "C-9c 回帰: 変数を含まない worktree 内相対 cd は従来どおりバイパス可"
 
-# --- C-9d: プレフィックス付き cd による前置バイパスの封鎖（#1471 Critical・敵対レビュー3巡目） ---
+# --- C-9d: プレフィックス付き cd による前置バイパスの封鎖（#N Critical・敵対レビュー3巡目） ---
 # `command cd` / `builtin cd` / `\cd` / `X= cd` / `eval "cd .."` は cd を実行して worktrees の
 # 外へ出るが、セグメント先頭が literal cd でないため肯定列挙の escape 検出をすり抜けていた。
 # found 後は「worktree 内滞在を保証できる素直な cd 以外の cwd 変更」を保守デフォルトで降ろす。
-echo "command-match: is_worktree_cd_bypass C-9d（プレフィックス付き cd の前置バイパス封鎖・#1471）"
+echo "command-match: is_worktree_cd_bypass C-9d（プレフィックス付き cd の前置バイパス封鎖・#N）"
 
 assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && command cd .. && git commit -m x')" \
   "C-9d: worktree 後の command cd .. はバイパス不可"
@@ -867,11 +867,11 @@ assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && 
 assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && cd src && git commit -m x')" \
   "C-9d 回帰: worktree 内の素直な cd は維持されバイパス可"
 
-# --- C-9e: 過剰ブロック誤爆の解消（引数の cd 系トークンで誤ブロックしない・#1471 敵対4巡目 Major） ---
+# --- C-9e: 過剰ブロック誤爆の解消（引数の cd 系トークンで誤ブロックしない・#N 敵対4巡目 Major） ---
 # _cm_seg_may_change_cwd をコマンド位置限定にし、無害コマンドの引数に cd/eval/exec/source/. が
 # 含まれても found を降ろさない（grep cd / rg exec / git add . 等の頻出コマンドの誤ブロック解消）。
 # プレフィックス経由の cd 実行（command/env cd）検出は維持する。
-echo "command-match: is_worktree_cd_bypass C-9e（引数の cd 系トークンで誤ブロックしない・#1471）"
+echo "command-match: is_worktree_cd_bypass C-9e（引数の cd 系トークンで誤ブロックしない・#N）"
 
 assert_eq "0" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && echo "starting cd now" && git commit -m x')" \
   "C-9e: echo の引数に cd を含んでも維持されバイパス可"
@@ -895,13 +895,13 @@ assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && 
 assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && env cd .. && git commit -m x')" \
   "C-9e 維持: env cd .. も引き続きバイパス不可"
 
-# --- C-9f: Codex 二次レビュー検出のバイパス封鎖（代入値の / 判定漏れ・CDPATH・#1471） ---
+# --- C-9f: Codex 二次レビュー検出のバイパス封鎖（代入値の / 判定漏れ・CDPATH・#N） ---
 # Codex 二次レビューが敵対4巡をすり抜けた 2 経路を検出（bash 実測で rc=0 再現済み）:
 #   (1) 代入プレフィックスの値に `/` を含むと（X=/tmp cd ..）代入判定 `!= */*` で除外され
 #       第 1 実コマンドの cd を見逃す → 代入判定を identifier= の正規表現に修正
 #   (2) CDPATH 設定時に裸相対 cd（cd core）が worktrees 外（CDPATH 配下）へ移動しうる →
 #       CDPATH 設定セグメントを cwd 変更扱いにして found を降ろす
-echo "command-match: is_worktree_cd_bypass C-9f（代入値の / と CDPATH バイパス封鎖・Codex #1471）"
+echo "command-match: is_worktree_cd_bypass C-9f（代入値の / と CDPATH バイパス封鎖・Codex #N）"
 
 assert_eq "1" "$(match_check is_worktree_cd_bypass 'cd .claude/worktrees/foo && X=/tmp cd ../../.. && git commit -m x')" \
   "C-9f: X=/tmp cd ..（代入値に / 含む）はバイパス不可"
@@ -1184,7 +1184,7 @@ _cm_test_long_cmd="git commit -m \"${_cm_test_long_body}\""
 assert_eq "0" "$(match_check _cm_test_within_budget 2 is_git_commit_command "$_cm_test_long_cmd")" \
   "40,000 文字規模の引用符付き引数でも 2 秒以内に完了する（O(n^2) 回帰ガード）"
 
-# --- is_review_verdict_post_command（#1527 Phase 2） ---
+# --- is_review_verdict_post_command（#N Phase 2） ---
 echo "command-match: is_review_verdict_post_command"
 if is_review_verdict_post_command 'bash scripts/claude-hooks/review-verdict-post.sh 2 --critical 0'; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}✓${NC} RVP: repo 相対実行を検知"
@@ -1202,7 +1202,7 @@ else
   PASS=$((PASS + 1)); echo -e "  ${GREEN}✓${NC} RVP: echo 引数は非検知"
 fi
 
-# --- is_review_verdict_post_command: 変数実行の検知 + 代入の非検知（{ISSUE-ID}） ---
+# --- is_review_verdict_post_command: 変数実行の検知 + 代入の非検知 ---
 # review.md「レビュー結果のコメント」の locator は次の 2 行を必ず含む:
 #   REL="scripts/claude-hooks/review-verdict-post.sh"   ← 代入（投稿前）
 #   bash "$RVP" <PR#> --critical N --major N ...        ← 実行本体
