@@ -1,5 +1,18 @@
 #!/bin/bash
 # シンプルなテストランナー（bats 不要）
+#
+# 使い方:
+#   bash test-runner.sh                       # 全件（CI・既定。この挙動は変えない）
+#   bash test-runner.sh --only <pattern>      # ファイル名に <pattern> を含むテストだけ実行
+#   bash test-runner.sh --only=<pattern>      # 同上（= 記法）
+#
+# --only は TDD の Red → Green ループ用。全件は 81 ファイル・2900 アサーション超で
+# 4 分以上かかるため、1 サイクルごとに全件を待つコストが大きい。**ヘルパー注入の仕組みは
+# 変えず、走らせる対象を絞るだけ**なので、テストファイルの単体実行が不可という設計
+# （README / testing.md）はそのまま。
+#
+# fail-closed: マッチ 0 件は exit 1、未知のオプションは exit 2。
+# 「絞ったつもりで 0 件 green」「タイポで黙って全件 4 分待つ」のどちらも起こさない。
 set -uo pipefail
 
 PASS=0
@@ -7,6 +20,48 @@ FAIL=0
 ERRORS=()
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
+
+ONLY=""
+# 空パターンを弾く（空だと全件実行に落ちて「絞ったつもりで 4 分待つ」事故になる）。
+# `--only` を値なしで渡したときは shift 2 が失敗して**無限ループ**になるため、
+# shift する前に引数の有無を確認する（実測でハングを再現・fail-closed で exit 2）。
+_require_pattern() {
+  if [ -z "${1:-}" ] || [ -z "${1//[[:space:]]/}" ]; then
+    echo "--only にパターンを指定してください（使い方は --help）" >&2
+    exit 2
+  fi
+}
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only)
+      _require_pattern "${2:-}"
+      ONLY="$2"
+      shift 2
+      ;;
+    --only=*)
+      ONLY="${1#--only=}"
+      _require_pattern "$ONLY"
+      shift
+      ;;
+    -h|--help)
+      # ヘッダコメントを sed の行番号で切り出すと、コメントを 1 行足しただけで
+      # 無言でズレる（別の行が help として出る）。ここは literal で持つ。
+      cat <<'USAGE'
+使い方:
+  bash test-runner.sh                    # 全件（CI・既定）
+  bash test-runner.sh --only <pattern>   # ファイル名に <pattern> を含むテストだけ実行
+  bash test-runner.sh --only=<pattern>   # 同上（= 記法）
+
+exit: 0=全 pass / N=失敗数 / 1=マッチ 0 件 / 2=引数エラー
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "unknown option: ${1}（使い方は --help）" >&2
+      exit 2
+      ;;
+  esac
+done
 
 # カラー出力
 GREEN='\033[0;32m'
@@ -120,18 +175,38 @@ run_test_file() {
   rm -f "$result_file"
 }
 
+MATCHED=0
+
 run_tests() {
   for test_file in "$SCRIPT_DIR"/test-*.sh; do
     [ "$test_file" = "$SCRIPT_DIR/test-runner.sh" ] && continue
     [ -f "$test_file" ] || continue
     local test_name
     test_name=$(basename "$test_file" .sh)
+    # --only 指定時はファイル名（basename）に部分一致するものだけ走らせる
+    if [ -n "$ONLY" ]; then
+      case "$test_name" in
+        *"$ONLY"*) ;;
+        *) continue ;;
+      esac
+    fi
+    MATCHED=$((MATCHED + 1))
     echo -e "\n${YELLOW}=== $test_name ===${NC}"
     run_test_file "$test_file" "$test_name"
   done
 }
 
 run_tests
+
+# 0 件マッチは fail（「絞ったつもりで 1 件も走らず green」を green と誤認させない）
+if [ "$MATCHED" -eq 0 ]; then
+  if [ -n "$ONLY" ]; then
+    echo -e "\n${RED}❌ --only '$ONLY' にマッチするテストがありません（0 件実行は green ではない）${NC}" >&2
+  else
+    echo -e "\n${RED}❌ テストファイルが 1 件も見つかりません（glob 破損の疑い）${NC}" >&2
+  fi
+  exit 1
+fi
 
 echo -e "\n${YELLOW}=== 結果 ===${NC}"
 echo -e "${GREEN}Pass: $PASS${NC}  ${RED}Fail: $FAIL${NC}"

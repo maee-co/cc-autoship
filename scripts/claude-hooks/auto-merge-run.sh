@@ -29,6 +29,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/auto-merge-criteria.sh"
 
+# Pure: CI / マージ結果コメントの文言（{ISSUE-ID} Phase 3）。lc_am_step があれば言語に追随し、
+#   無ければ第 2 引数（= 従来の日本語文言）をそのまま返す。auto-merge-criteria.sh の
+#   _amc_* ヘルパーと同じフォールバック規約で、language-config.sh 未同梱の環境でも
+#   出力が従来どおりに保たれる。
+#   Args: $1 = ステップキー, $2 = 従来の日本語文言
+#   Stdout: コメント全文（ci_fail / merge_fail は %s を含む printf フォーマット）
+_amr_step() {
+  if declare -f lc_am_step >/dev/null 2>&1; then
+    local _s; _s="$(lc_am_step "$1" "$(_amc_lang)")"
+    # 未知キーで空が返ったらフォールバックする（空コメントを投稿しない）
+    if [ -n "$_s" ]; then printf '%s' "$_s"; return 0; fi
+  fi
+  printf '%s' "$2"
+}
+
 PR="${1:-}"
 if [ -z "$PR" ]; then
   PR="$(gh pr view --json number -q .number 2>/dev/null || true)"
@@ -66,9 +81,9 @@ fi
 # --- ステップ 2: CI 待ち（CI 未設定はスキップ） ---
 ROLLUP_LEN="$(gh pr view "$PR" --json statusCheckRollup --jq '.statusCheckRollup | length' 2>/dev/null || echo "0")"
 if [ "${ROLLUP_LEN:-0}" = "0" ]; then
-  gh pr comment "$PR" --body "## 🤖 /auto-merge CI: ⏭️ CI 未設定
+  gh pr comment "$PR" --body "$(_amr_step ci_skip "## 🤖 /auto-merge CI: ⏭️ CI 未設定
 
-statusCheckRollup が空のため CI チェックをスキップします。squash merge を実行します。" >/dev/null || true
+statusCheckRollup が空のため CI チェックをスキップします。squash merge を実行します。")" >/dev/null || true
 else
   TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
   if [ -n "$TIMEOUT_BIN" ]; then
@@ -77,19 +92,20 @@ else
     CI_WATCH=(gh pr checks "$PR" --watch --fail-fast)
   fi
   if ! "${CI_WATCH[@]}" >/dev/null 2>&1; then
-    gh pr comment "$PR" --body "## 🤖 /auto-merge CI: ❌ 失敗 / タイムアウト
+    # shellcheck disable=SC2059  # フォーマットは lc_am_step 由来（%s のみ）。checks 出力は引数で渡す
+    gh pr comment "$PR" --body "$(printf "$(_amr_step ci_fail "## 🤖 /auto-merge CI: ❌ 失敗 / タイムアウト
 
 \`\`\`
-$(gh pr checks "$PR" 2>&1 | tail -20)
+%s
 \`\`\`
 
-CI 不発（Actions 枠枯渇等）の場合は auto-merge.md ステップ 2.5（ローカル検証フォールバック）を手動で実施すること。メンテナの対応待ちです。" >/dev/null || true
+CI 不発（Actions 枠枯渇等）の場合は auto-merge.md ステップ 2.5（ローカル検証フォールバック）を手動で実施すること。メンテナの対応待ちです。")" "$(gh pr checks "$PR" 2>&1 | tail -20)")" >/dev/null || true
     echo "CI_FAIL: CI 失敗 / タイムアウト。PR #$PR" >&2
     exit 3
   fi
-  gh pr comment "$PR" --body "## 🤖 /auto-merge CI: ✅ 全 check 成功
+  gh pr comment "$PR" --body "$(_amr_step ci_pass "## 🤖 /auto-merge CI: ✅ 全 check 成功
 
-CI が pass したため、squash merge を実行します。" >/dev/null || true
+CI が pass したため、squash merge を実行します。")" >/dev/null || true
 fi
 
 # --- ステップ 3: squash merge（成否は state 再確認で判定・#{ISSUE-ID}） ---
@@ -97,19 +113,20 @@ MERGE_OUT="$(gh pr merge "$PR" --squash 2>&1)" || true
 sleep 3
 MERGE_STATE="$(gh pr view "$PR" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")"
 if [ "$MERGE_STATE" != "MERGED" ]; then
-  gh pr comment "$PR" --body "## 🤖 /auto-merge マージ失敗: ❌
+  # shellcheck disable=SC2059  # フォーマットは lc_am_step 由来（%s のみ）。マージ出力は引数で渡す
+  gh pr comment "$PR" --body "$(printf "$(_amr_step merge_fail "## 🤖 /auto-merge マージ失敗: ❌
 
 \`\`\`
-$MERGE_OUT
+%s
 \`\`\`
 
-コンフリクト等の可能性があります。メンテナの対応待ちです。" >/dev/null || true
+コンフリクト等の可能性があります。メンテナの対応待ちです。")" "$MERGE_OUT")" >/dev/null || true
   echo "MERGE_FAIL: state=${MERGE_STATE}。PR #${PR}" >&2
   exit 4
 fi
-gh pr comment "$PR" --body "## 🤖 /auto-merge マージ完了: ✅
+gh pr comment "$PR" --body "$(_amr_step merge_ok "## 🤖 /auto-merge マージ完了: ✅
 
-\`squash merge\` でマージしました。worktree は自動クリーンアップされます。" >/dev/null || true
+\`squash merge\` でマージしました。worktree は自動クリーンアップされます。")" >/dev/null || true
 
 # --- ステップ 3.5: cleanup + Issue クローズ確認 ---
 bash "$SCRIPT_DIR/cleanup-merged-worktrees.sh" "$PR" || true

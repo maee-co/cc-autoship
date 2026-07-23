@@ -20,7 +20,7 @@
 #     直接実行時のみ strict mode を有効化し、source 先の親シェルに設定を漏らさない。
 
 # 直接実行した場合のみ strict mode を有効化する（source 時は親の設定を尊重）
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" == "${0}" ]]; then
   set -uo pipefail
 fi
 

@@ -159,8 +159,8 @@ evaluate_trigger_from_data() {
   local file_list file_count
   file_list=$(printf '%s' "$file_diff_list" | cut -f1)
   file_count=0
-  while IFS=$'\t' read -r path _ _; do
-    [ -z "$path" ] && continue
+  while IFS=$'\t' read -r file_path _ _; do
+    [ -z "$file_path" ] && continue
     file_count=$((file_count + 1))
   done <<< "$file_diff_list"
 

@@ -9,7 +9,7 @@
 # 検知ロジック:
 #   scripts/claude-hooks/lib/command-match.sh の is_gh_pr_create_command を使用。
 #   引用符の内側（"gh pr create" / 'gh pr create'）や echo / grep / cat の引数としての出現は除外する
-#   （{ISSUE-ID} のコメントで メンテナ が指摘した誤発火リスクへの対処）。
+#   （{ISSUE-ID} のコメントで メンテナが指摘した誤発火リスクへの対処）。
 #
 # バイパス条件:
 #   コマンドに `cd .../.claude/worktrees/...` を含む場合は通過させる。

@@ -40,7 +40,7 @@ declare -f categorize_diff_lines_from_files >/dev/null 2>&1 \
 declare -f check_security_intent_from_text >/dev/null 2>&1 \
   || source "${_PRCLASS_LIB_DIR:-.}/codex-trigger-criteria.sh"
 
-# light 閾値（設計判断 1 / メンテナ 承認 2026-07-02）: 実コード ≤ 50 行 かつ 変更ファイル ≤ 3（または実コード = 0）
+# light 閾値（設計判断 1 / メンテナ承認 2026-07-02）: 実コード ≤ 50 行 かつ 変更ファイル ≤ 3（または実コード = 0）
 readonly PR_CLASS_LIGHT_MAX_PROD_LINES=50
 readonly PR_CLASS_LIGHT_MAX_FILES=3
 

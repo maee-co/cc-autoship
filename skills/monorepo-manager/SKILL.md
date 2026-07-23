@@ -135,6 +135,31 @@ allowed-tools:
 
 ## 出力フォーマット
 
+**出力はセッションの言語で書く**（= ユーザーに応答しているのと同じ言語）。以下のテンプレは日本語セッション用の見本であり、文字列をそのまま写すためのものではない。英語セッションで日本語テンプレをそのまま出すと、`/commit-push` の 1 ステップ目でいきなり読めない表が出る。
+
+固定ラベルは以下の対応で置き換える（訳の揺れを防ぐため、この語を使う）:
+
+| 日本語 | English |
+|--------|---------|
+| リポジトリ整合性チェック結果 | Repository integrity check |
+| A. モノレポ / マルチパッケージ整合性 | A. Monorepo / multi-package integrity |
+| B. 開発フロー遵守 | B. Development flow compliance |
+| # / チェック項目 / 結果 / 備考 | # / Check / Result / Notes |
+| スコープ内編集 | Edits within scope |
+| 共有パッケージ影響 | Shared package impact |
+| 依存関係整合性 | Dependency consistency |
+| ディレクトリ構成 | Directory structure |
+| ブランチ命名 | Branch naming |
+| コミットメッセージ | Commit message |
+| Issue 紐付け | Issue linkage |
+| worktree 運用 | Worktree usage |
+| 総合判定 | Overall verdict |
+| そのまま進行 | proceed as is |
+| 注意事項を確認の上で進行可 | may proceed after reviewing the warnings |
+| 修正が必要 | fixes required |
+
+**言語に依らず不変**（翻訳しない）: 判定値 `PASS` / `WARN` / `BLOCK` と記号 `✅` / `⚠️` / `❌` / `N/A`（呼び出し側がこれらで分岐するため）。
+
 以下のマークダウンテーブルを直接出力する（コードブロックで囲まない）:
 
 ## リポジトリ整合性チェック結果

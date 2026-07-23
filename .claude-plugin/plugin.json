@@ -1,6 +1,6 @@
 {
   "name": "cc-autoship",
-  "version": "0.1.19",
+  "version": "0.2.0",
   "description": "Autonomous Issue → PR → merge for Claude Code on GitHub. AI が GitHub の Issue 駆動フローをマージまで自律で回すスターターキット。",
   "license": "MIT",
   "author": {

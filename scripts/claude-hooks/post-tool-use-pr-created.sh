@@ -63,7 +63,7 @@ if [ -n "$PR_NUM" ]; then
     WORKFLOW_SCOPE_REMINDER="
 3. ⚠️ **workflow scope チェック**: \`.github/workflows/\` 配下に新規ファイル追加あり（${NEW_WORKFLOWS_INLINE}）。
    - \`gh auth status\` で OAuth scope に \`workflow\` が含まれているか確認してください
-   - 不足なら メンテナ に \`gh auth refresh -s workflow\` を実行いただくよう依頼（PR #N で push 失敗の前例あり）
+   - 不足なら メンテナに \`gh auth refresh -s workflow\` を実行いただくよう依頼（PR #N で push 失敗の前例あり）
    - 既に CI が pass している場合 push は成功済なので追加対応不要"
   fi
 fi
@@ -124,14 +124,14 @@ if [ -n "$PR_NUM" ]; then
   REMINDER="${PR_CLASS_LINE}PR #${PR_NUM} が作成されました。以下を **順番に** 実行してください:
 
 1. **最優先**: review スキルを起動（引数: ${REVIEW_ARGS}）（一次レビューを実施し、結果は**スキル手順どおり \`review-verdict-post.sh\` で投稿する** — 見出しと判定節はスクリプトが付与し、\`/auto-merge\` への連鎖もこの実行を検知する。手書きのレビューコメントで代替・重複投稿しない）
-2. pr-context-summary スキルを起動（引数: ${SUMMARY_ARGS}）（メンテナ とのやり取り・意思決定サマリを GitHub Issue にコメントとして残し、後続タスクへの方針引き継ぎを可能にします）${WORKFLOW_SCOPE_REMINDER}
+2. pr-context-summary スキルを起動（引数: ${SUMMARY_ARGS}）（メンテナとのやり取り・意思決定サマリを GitHub Issue にコメントとして残し、後続タスクへの方針引き継ぎを可能にします）${WORKFLOW_SCOPE_REMINDER}
 
 順序を守ること: review スキルを後回しにすると一次レビュー欠落のリスクがあります（dev-flow ルール参照）。${PROTECTED_PATH_WARNING}"
 else
   REMINDER="gh pr create が実行されました。以下を **順番に** 実行してください:
 
 1. **最優先**: review スキルを起動（引数: <PR#>）（一次レビュー。結果は**スキル手順どおり \`review-verdict-post.sh\` で投稿する** — 手書きのレビューコメントで代替しない）
-2. pr-context-summary スキルを起動（引数: --mode pre-merge --pr <PR#>）（メンテナ とのやり取り・意思決定を GitHub Issue にコメント記録）
+2. pr-context-summary スキルを起動（引数: --mode pre-merge --pr <PR#>）（メンテナとのやり取り・意思決定を GitHub Issue にコメント記録）
 
 順序を守ること: review スキルを後回しにすると一次レビュー欠落のリスクがあります（dev-flow ルール参照）。"
 fi

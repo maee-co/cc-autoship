@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Autonomous Issue → PR → merge for Claude Code on GitHub.",
-    "version": "0.1.19"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "cc-autoship",
       "source": "./",
       "description": "Autonomous Issue → PR → merge for Claude Code on GitHub. AI が GitHub の Issue 駆動フローをマージまで自律で回すスターターキット。",
-      "version": "0.1.19",
+      "version": "0.2.0",
       "strict": false
     }
   ]

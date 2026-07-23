@@ -15,6 +15,11 @@ source "$ROOT/claude-hooks/lib/review-verdict.sh"
 # shellcheck disable=SC1091
 source "$ROOT/claude-hooks/lib/auto-merge-criteria.sh"
 
+# 表示言語の決定性: compose は lc_current_lang（native 追随）に従うため、
+# 既定ケースは ja に固定し、実行環境の ~/.claude/settings.json に左右されないようにする
+# （CI と開発機で結果が変わると回帰検知が壊れる）。en の検証は各ケースで明示上書きする。
+export CC_AUTOSHIP_LANG=ja
+
 echo "test-review-verdict: 判定の機械導出（{ISSUE-ID} Phase 2）"
 
 # --- rvp_derive_verdict: 導出マトリクス ---
@@ -159,3 +164,78 @@ An English review body without any Japanese judgment section.
 
 <!-- review-verdict: fail -->"
 assert_eq "fail" "$(extract_review_verdict_from_text "$EN_MARKER_ONLY")" "統合: 英語本文+マーカーのみで fail 抽出（{ISSUE-ID} 解消）"
+
+# --- 表示文言の言語追随---
+# 不変条件: 表示（見出し・判定節・判定ラベル）は言語に追随するが、
+#   機械可読マーカーと実パーサの抽出結果は**言語不変**（= auto-merge 連鎖が切れない）。
+echo "test-review-verdict: 表示文言の言語追随"
+
+# en: 見出し・判定節・判定ラベルが英語になる
+OUT_EN_PASS="$(CC_AUTOSHIP_LANG=en rvp_compose_comment "$BODY_FACTS" pass 0 0 green no "")"
+assert_contains "## Review Result" "$OUT_EN_PASS" "compose(en): 見出しが英語"
+assert_contains "### Verdict"      "$OUT_EN_PASS" "compose(en): 判定節見出しが英語"
+
+OUT_EN_YK="$(CC_AUTOSHIP_LANG=en rvp_compose_comment "$BODY_FACTS" 要確認 0 2 green no "")"
+# 太字ラベルで検証する（素の "needs-review" だとマーカー <!-- review-verdict: needs-review -->
+# に誤マッチし、ラベルが日本語のままでも通ってしまうため）
+assert_contains "**needs-review**" "$OUT_EN_YK" "compose(en): 判定ラベルが 要確認→needs-review"
+
+OUT_EN_FAIL="$(CC_AUTOSHIP_LANG=en rvp_compose_comment "$BODY_FACTS" fail 1 0 red no "")"
+
+# ★ 最重要の不変条件: en でもマーカーは言語不変トークンで刻印され、実パーサが抽出できる
+#   （v0.1.16 の「英語だと auto-merge 連鎖が黙って切れる」の再演を防ぐ回帰テスト）
+assert_contains "<!-- review-verdict: pass -->"         "$OUT_EN_PASS" "compose(en): マーカーは言語不変（pass）"
+assert_contains "<!-- review-verdict: needs-review -->" "$OUT_EN_YK"   "compose(en): マーカーは言語不変（needs-review）"
+assert_contains "<!-- review-verdict: fail -->"         "$OUT_EN_FAIL" "compose(en): マーカーは言語不変（fail）"
+assert_eq "pass"   "$(extract_review_verdict_from_text "$OUT_EN_PASS")" "統合(en): 英語表示でも pass 抽出（連鎖維持）"
+assert_eq "要確認" "$(extract_review_verdict_from_text "$OUT_EN_YK")"   "統合(en): 英語表示でも 要確認 抽出（連鎖維持）"
+assert_eq "fail"   "$(extract_review_verdict_from_text "$OUT_EN_FAIL")" "統合(en): 英語表示でも fail 抽出（連鎖維持）"
+
+# ja: 既存出力の後方互換（日本語のまま）
+OUT_JA_PASS="$(CC_AUTOSHIP_LANG=ja rvp_compose_comment "$BODY_FACTS" pass 0 0 green no "")"
+assert_contains "## レビュー結果" "$OUT_JA_PASS" "compose(ja): 見出しは日本語のまま（後方互換）"
+assert_contains "### 判定"        "$OUT_JA_PASS" "compose(ja): 判定節は日本語のまま（後方互換）"
+OUT_JA_YK="$(CC_AUTOSHIP_LANG=ja rvp_compose_comment "$BODY_FACTS" 要確認 0 2 green no "")"
+assert_contains "**要確認**" "$OUT_JA_YK" "compose(ja): 判定ラベルは 要確認 のまま（後方互換）"
+assert_eq "要確認" "$(extract_review_verdict_from_text "$OUT_JA_YK")" "統合(ja): 日本語表示でも 要確認 抽出"
+
+# light マーカーの位置は言語に依らず 2 行目（review.md 不変条件）
+OUT_EN_LIGHT="$(CC_AUTOSHIP_LANG=en rvp_compose_comment "$BODY_FACTS" pass 0 0 green no "light")"
+assert_eq "<!-- review:light -->" "$(printf '%s\n' "$OUT_EN_LIGHT" | sed -n '2p')" "compose(en): light マーカーは 2 行目"
+
+# validate: 英語の見出し・判定節も拒否する（スクリプトが付与するため二重付与を防ぐ）
+if rvp_validate_body "## Review Result
+$BODY_FACTS" >/dev/null 2>&1; then
+  FAIL=$((FAIL + 1)); ERRORS+=("validate: 英語見出し入り本文は拒否"); echo -e "  ${RED}✗${NC} validate: 英語見出し入り本文は拒否"
+else
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}✓${NC} validate: 英語見出し入り本文は拒否"
+fi
+if rvp_validate_body "$BODY_FACTS
+### Verdict
+pass" >/dev/null 2>&1; then
+  FAIL=$((FAIL + 1)); ERRORS+=("validate: 英語判定節入り本文は拒否"); echo -e "  ${RED}✗${NC} validate: 英語判定節入り本文は拒否"
+else
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}✓${NC} validate: 英語判定節入り本文は拒否"
+fi
+# 地の文の "Verdict" は受理（誤爆防止・日本語版の「判定基準は…」と対称）
+if rvp_validate_body "$BODY_FACTS
+See review.md for the verdict rules." >/dev/null 2>&1; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}✓${NC} validate: 地の文の verdict は受理"
+else
+  FAIL=$((FAIL + 1)); ERRORS+=("validate: 地の文の verdict は受理"); echo -e "  ${RED}✗${NC} validate: 地の文の verdict は受理"
+fi
+
+# --- zsh 経路の回帰（{ISSUE-ID} 実測バグ）---
+# hook 本体は bash だが lib はスキル経由で zsh から source されることがある。zsh では
+# status が read-only（$? のエイリアス）なので `local status=...` が失敗し、判定ラベルが
+# 空文字になる事故が起きた。**bash で走る本テストでは原理的に検出できない**ため、zsh が
+# 使える環境でだけ実際に zsh で評価して回帰を止める（無い環境ではスキップ）。
+if command -v zsh >/dev/null 2>&1; then
+  ZSH_LABEL="$(zsh -c "source '$ROOT/claude-hooks/lib/language-config.sh'; lc_verdict_label 要確認 en" 2>/dev/null)"
+  assert_eq "needs-review" "$ZSH_LABEL" "zsh: 判定ラベルが空にならない（status 予約変数の回帰）"
+  ZSH_COMPOSE="$(zsh -c "source '$ROOT/claude-hooks/lib/review-verdict.sh'; CC_AUTOSHIP_LANG=en rvp_compose_comment 'B' 要確認 0 2 green no ''" 2>/dev/null)"
+  assert_contains "**needs-review**"                      "$ZSH_COMPOSE" "zsh: compose(en) の判定ラベルが出る"
+  assert_contains "<!-- review-verdict: needs-review -->" "$ZSH_COMPOSE" "zsh: compose のマーカーは言語不変"
+else
+  echo "  - zsh 未インストールのため zsh 回帰テストはスキップ"
+fi

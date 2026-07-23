@@ -33,6 +33,8 @@
 #   echo "before"; gh pr create
 #   gh pr "create" --title ...        ({ISSUE-ID}: 引用符分割サブコマンド)
 #   git "commit" -m x / git p"u"sh origin main も同様にトークン化で復元される
+#   gh pr -R o/r merge N / gh pr --repo o/r merge N
+#                                      ({ISSUE-ID} / {ISSUE-ID}: pr とサブコマンドの間の -R/--repo)
 #
 # コマンド置換（$(...) / `...`）の扱い:
 #   bash はコマンド置換の中身をサブシェルで「実行」する。`PR_URL=$(gh pr create)` や
@@ -715,9 +717,32 @@ _cm_segment_starts_with() {
     return 1
 }
 
+# gh pr の永続フラグ（cobra/pflag の persistent flag）。`pr` とサブコマンドの間・後どちらにも
+# 置ける（実測 {ISSUE-ID}: `gh pr -R o/r view N` は成功。`gh pr --help` の FLAGS 欄に -R/--repo、
+# INHERITED FLAGS に --help）。値を取る -R/--repo とその値、値を取らない --help のみを対象と
+# する。それ以外の未知フラグ（サブコマンド固有のフラグ。例: `create` の `-t`）は対象外のまま
+# 安全側（非検知）に倒す — `gh pr -t merge create` のように「フラグ値がたまたまサブコマンド名
+# と同じ」形を誤検知しないため（そもそも `-t` は `pr` 直下の有効フラグではなく、サブコマンドの
+# 後でしか意味を持たない実行不能な形であり、真の `create` 呼び出しは `gh pr create -t merge`
+# のように sub が pr に隣接するため既存ロジックで検知できる）。
+#
+# -R は pflag の shorthand flag のため、値を「区切りなしで連結」できる（実測: `gh pr -Ro/r
+# view N` も成功 = `-R o/r` / `-R=o/r` と同じ意味）。当初 `-R[[:space:]]+…` / `-R=…` の
+# 2 パターンのみだったため `gh pr -Ro/r merge N`（連結形）が非検知のまま残っていた
+# （light レビューで実 gh バイナリに対して実測し発覚）。`-R[[:space:]]*[^[:space:]]+`
+# 1 本に統合し、空白区切り・連結・`=` 区切りの 3 形を一括でカバーする（`=value` も
+# `[^[:space:]]+` の一部として自然に飲み込まれる）。--repo は long flag のため連結形が
+# 存在しない（実測: `gh pr --repoowner/repo` は `unknown flag` でエラー）。
+_CM_GH_PR_FLAG_RE='-R[[:space:]]*[^[:space:]]+|--repo([[:space:]]+|=)[^[:space:]]+|--help'
+
 # gh pr <sub> の実行を判定
 # 引数: $1 = command, $2 = subcommand
 # サブコマンドは allowlist で固定（ERE 注入対策、m-1）。
+# {ISSUE-ID}: `gh pr <sub>` の隣接のみを要求していたため `gh pr -R o/r merge N` /
+# `gh pr --repo o/r merge N` のようにサブコマンド前にフラグが挟まる形を検知できなかった
+# （5 hook が共用する検知漏れ。`is_gh_pr_merge_command` 等のゲートを CLI から迂回できた）。
+# `_CM_GH_PR_FLAG_RE` に一致するフラグ塊を 0 個以上許容してからサブコマンドに到達するかを
+# 判定する（フラグの後ろ・前どちらの隣接パターンも同じ ERE でカバーする）。
 _cm_has_gh_pr_subcommand() {
     local cmd="$1"
     local sub="$2"
@@ -731,7 +756,7 @@ _cm_has_gh_pr_subcommand() {
         *) return 1 ;;
     esac
 
-    _cm_segment_starts_with "$cmd" "gh[[:space:]]+pr[[:space:]]+${sub}"
+    _cm_segment_starts_with "$cmd" "gh[[:space:]]+pr[[:space:]]+((${_CM_GH_PR_FLAG_RE})[[:space:]]+)*${sub}"
 }
 
 is_gh_pr_create_command() {

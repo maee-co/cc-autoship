@@ -132,6 +132,28 @@ if rc_is_fix_result_heading "## レビュー結果
 判定: pass"; then assert_eq "ok" "fail" "通常レビューを --fix と誤検知してはいけない"; else assert_eq "ok" "ok" "## レビュー結果（通常）は --fix でない"; fi
 if rc_is_fix_result_heading "## 🤖 一次レビュー"; then assert_eq "ok" "fail" "一次レビューを --fix と誤検知してはいけない"; else assert_eq "ok" "ok" "## 一次レビューは --fix でない"; fi
 
+# 言語不変マーカー（{ISSUE-ID} Phase 3）: レビュー本文がセッション言語で書かれるようになったため、
+# 英語セッションの --fix コメントは日本語見出しを持たない。見出し文字列に依存した検知のままだと
+# 「--fix なのに通常レビュー扱い（= auto-merge を促す）」に無言で倒れる（#N と同型の連鎖事故）。
+# 通常レビューの <!-- review-verdict: ... --> と対になるマーカーで、言語に依らず区別する。
+if rc_is_fix_result_heading "## Review Fix Results
+<!-- review-fix-result -->
+| 1 | Minor | 90 | ..."; then assert_eq "ok" "ok" "英語 --fix をマーカーで検知"; else assert_eq "ok" "fail" "マーカー付き英語 --fix を検知すべき"; fi
+if rc_is_fix_result_heading "<!--   review-fix-result   -->"; then assert_eq "ok" "ok" "マーカー内の空白ゆらぎを許容"; else assert_eq "ok" "fail" "空白ゆらぎを許容すべき"; fi
+# マーカーが無い英語 --fix は検知できない（既知の制限。テンプレートがマーカーを必ず出す前提）
+if rc_is_fix_result_heading "## Review Fix Results"; then assert_eq "ok" "fail" "マーカー無しの英語見出しは検知対象外"; else assert_eq "ok" "ok" "マーカー無し英語見出しは非検知（既知の制限）"; fi
+# 通常レビューのマーカーを --fix と取り違えない（両者は排他）
+if rc_is_fix_result_heading "## Review Result
+<!-- review-verdict: pass -->"; then assert_eq "ok" "fail" "通常レビューのマーカーを --fix と誤検知してはいけない"; else assert_eq "ok" "ok" "review-verdict マーカーは --fix でない"; fi
+
+# post-tool-use-auto-merge-after-review.sh は rc_has_review_heading を **前段ゲート**に使い、
+# 一致しなければ即 exit 0 する。その後段でようやく rc_is_fix_result_heading の分岐に入る。
+# 日本語の `## レビュー指摘修正結果` は RC_REVIEW_HEADING_PATTERN の `レビュー指摘修正結果` に
+# 一致するため前段を通過できるが、英語見出し + マーカーだけだと前段で弾かれ、--fix 分岐に
+# 到達しない = 再 /review リマインドが無言で出なくなる。前段でもマーカーを通すこと。
+if rc_has_review_heading "## Review Fix Results
+<!-- review-fix-result -->"; then assert_eq "ok" "ok" "英語 --fix も前段ゲート（rc_has_review_heading）を通過する"; else assert_eq "ok" "fail" "英語 --fix が前段ゲートで弾かれると再 /review リマインドが消える"; fi
+
 # 見出しなし（本文中の言及）は検知しない
 if rc_has_review_heading "レビュー結果について議論したいです"; then
   assert_eq "nodetect" "detect" "見出しなしの本文は検知しないべき"

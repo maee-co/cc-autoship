@@ -107,11 +107,11 @@ assert_eq "1" "$(match_check is_gh_pr_comment_command 'echo "gh pr comment 42 ..
 assert_eq "1" "$(match_check is_gh_pr_comment_command 'grep "gh pr comment" hooks/')" \
   "grep \"gh pr comment\" は誤検知しない"
 
-# メンテナ 観測の実例: 別 hook の調査時に発火した複数行コマンド
+# メンテナ観測の実例: 別 hook の調査時に発火した複数行コマンド
 COMPLEX_CMD='echo "=== pre-tool-use.sh の gh pr create 検知 ==="
 grep -n "gh.*pr.*create\|gh pr create" scripts/claude-hooks/pre-tool-use.sh'
 assert_eq "1" "$(match_check is_gh_pr_create_command "$COMPLEX_CMD")" \
-  "メンテナ 観測の実例（echo + grep の組み合わせ）は誤検知しない"
+  "メンテナ観測の実例（echo + grep の組み合わせ）は誤検知しない"
 
 # --- is_gh_pr_merge_command: 正の検知 ---
 echo "command-match: gh pr merge 正の検知"
@@ -130,6 +130,54 @@ assert_eq "1" "$(match_check is_gh_pr_merge_command 'gh pr list')" \
 
 assert_eq "1" "$(match_check is_gh_pr_merge_command 'echo "gh pr merge done"')" \
   "echo \"gh pr merge\" は誤検知しない"
+
+# --- {ISSUE-ID} / #N: gh pr とサブコマンドの間のフラグ（-R / --repo）を検知 ---
+# `_cm_has_gh_pr_subcommand` が `gh pr <sub>` の隣接のみを要求していたため、
+# `gh pr -R o/r merge N` のようにサブコマンド前にフラグが挟まる形（gh が正式に受理する）
+# を検知できず、5 hook 共用のゲートがすり抜けていた。
+echo "command-match: {ISSUE-ID} gh pr <flag> <sub> のフラグ前置検知"
+
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'gh pr -R acme/widgets merge 78')" \
+  "gh pr -R acme/widgets merge 78 を検知する（-R が merge の前）"
+
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'gh pr --repo acme/widgets merge 78')" \
+  "gh pr --repo acme/widgets merge 78 を検知する（--repo が merge の前）"
+
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'gh pr --repo=acme/widgets merge 78')" \
+  "gh pr --repo=acme/widgets merge 78（= 結合形）を検知する"
+
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'gh pr -R=acme/widgets merge 78')" \
+  "gh pr -R=acme/widgets merge 78（-R= 結合形）を検知する"
+
+# -R は pflag の shorthand flag のため区切りなし連結（-Rvalue）も有効な gh 構文
+# （実測: `gh pr -Racme/widgets view N` は成功。--repo は long flag のため非対応
+# — `gh pr --repoowner/repo` は `unknown flag` でエラーになることを実 gh バイナリで確認済み）。
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'gh pr -Racme/widgets merge 78')" \
+  "gh pr -Racme/widgets merge 78（-R 区切りなし連結形）を検知する"
+
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'gh pr -R "acme/widgets" merge 78')" \
+  "gh pr -R \"acme/widgets\" merge 78（値が引用符付き）を検知する"
+
+assert_eq "0" "$(match_check is_gh_pr_create_command 'gh pr -R acme/widgets create --title x')" \
+  "is_gh_pr_create_command: gh pr -R acme/widgets create --title x を検知する"
+
+assert_eq "0" "$(match_check is_gh_pr_comment_command 'gh pr --repo acme/widgets comment 42 --body x')" \
+  "is_gh_pr_comment_command: gh pr --repo acme/widgets comment 42 --body x を検知する"
+
+assert_eq "0" "$(match_check is_gh_pr_merge_command 'bash -c "gh pr -R acme/widgets merge 78"')" \
+  "bash -c 経由でもフラグ前置形を検知する（{ISSUE-ID} との複合）"
+
+# 未知フラグ（サブコマンド固有・pr 直下では無効）は対象外のまま非検知に倒す。
+# `-t` は pr 直下の有効な永続フラグではなく、フラグ値がたまたまサブコマンド名と衝突する
+# 形（gh pr -t merge create）を誤って merge/create と検知しないことを保証する。
+assert_eq "1" "$(match_check is_gh_pr_merge_command 'gh pr -t merge create')" \
+  "gh pr -t merge create は merge と誤検知しない（-t は pr 直下の有効フラグでない）"
+
+assert_eq "1" "$(match_check is_gh_pr_create_command 'gh pr -t merge create')" \
+  "gh pr -t merge create は隣接する gh pr create ではないため create とも検知しない"
+
+assert_eq "1" "$(match_check is_gh_pr_merge_command 'gh pr -R acme/widgets list')" \
+  "gh pr -R acme/widgets list は merge と無関係（フラグ前置形でも似て非なるサブコマンドは除外）"
 
 # --- bash -c / sh -c ラップ形: 引数の中身は実行されるため検知する ---
 # bash -c "gh pr create" は二重引用符の中身が「リテラル文字列」ではなく「実行されるコマンド」。

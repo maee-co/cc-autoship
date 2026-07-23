@@ -69,7 +69,7 @@ assert_branch "feat/codex-dev-flow-rules" "" 1
 assert_branch "main" "" 1
 
 echo "== クロスシェル非依存性（bash / zsh どちらで source しても同一動作）=="
-# lib は Claude の Bash ツールや メンテナ 環境（zsh）から source されうる。
+# lib は Claude の Bash ツールや メンテナ環境（zsh）から source されうる。
 # BASH_REMATCH に依存すると zsh で番号が欠落するため、両シェルで検証する。
 LIB="$SCRIPT_DIR/../lib/resolve-issue-ref.sh"
 for sh in bash zsh; do

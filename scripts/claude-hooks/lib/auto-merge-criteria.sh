@@ -13,6 +13,32 @@ if [ -n "${_AUTO_MERGE_CRITERIA_SH_LOADED:-}" ]; then
 fi
 _AUTO_MERGE_CRITERIA_SH_LOADED=1
 
+# 判定コメントの表示文言を言語設定に追随させる（{ISSUE-ID} Phase 2a）。
+# language-config.sh を optional に読み込む 1 行ガード形。lc_* が無ければ日本語固定に
+# fail-safe する（配布キットの部分同梱・旧版との後方互換）。パス解決は bash / zsh 双方で
+# 動くよう ${BASH_SOURCE[0]:-$0}（下の data/ 解決と同じ理由・zsh は BASH_SOURCE 未定義）。
+# ★ 表示のみを切り替える: マージ可否（exit code）と検知ロジックは言語に依存しない。
+_AMC_LANG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+[ -f "${_AMC_LANG_LIB_DIR:-}/language-config.sh" ] && . "${_AMC_LANG_LIB_DIR}/language-config.sh"
+
+# Pure: 表示に使う実効言語（lc_current_lang 不在時は ja に fail-safe）
+_amc_lang() {
+  if declare -f lc_current_lang >/dev/null 2>&1; then lc_current_lang; else printf '%s' "ja"; fi
+}
+
+# Pure: 表示文言の取得ヘルパー。lc_* があれば言語に追随し、無ければ第 3 引数
+#   （= 従来の日本語文言）をそのまま返す。第 3 引数を必ず渡すことで、
+#   language-config.sh 未同梱の環境でも出力が従来どおりに保たれる。
+_amc_cond()     { if declare -f lc_am_condition           >/dev/null 2>&1; then lc_am_condition "$1" "$2";           else printf '%s' "$3"; fi; }
+_amc_head()     { if declare -f lc_am_heading             >/dev/null 2>&1; then lc_am_heading "$1" "$2";             else printf '%s' "$3"; fi; }
+_amc_concl()    { if declare -f lc_am_conclusion          >/dev/null 2>&1; then lc_am_conclusion "$1" "$2";          else printf '%s' "$3"; fi; }
+_amc_size_fmt() { if declare -f lc_am_condition_size_format >/dev/null 2>&1; then lc_am_condition_size_format "$1" "$2"; else printf '%s' "$3"; fi; }
+
+# Pure: 失敗理由の文言（{ISSUE-ID} Phase 2b）。check_* は独立して呼ばれるため言語解決を内部で行う。
+#   Args: $1 = キー, $2 = 従来の日本語文言（lc_* 不在時のフォールバック）
+#   Stdout: printf フォーマット（%s を含む場合あり）
+_amc_reason()   { if declare -f lc_am_reason >/dev/null 2>&1; then lc_am_reason "$1" "$(_amc_lang)"; else printf '%s' "$2"; fi; }
+
 # 上限定数
 readonly AUTO_MERGE_MAX_LINES=500
 readonly AUTO_MERGE_MAX_FILES=10
@@ -54,11 +80,13 @@ check_size_from_data() {
   local additions="$1" deletions="$2" file_count="$3"
   local total=$((additions + deletions))
   if [ "$total" -gt "$AUTO_MERGE_MAX_LINES" ]; then
-    echo "差分サイズ超過: ${total} 行（上限 ${AUTO_MERGE_MAX_LINES}）" >&2
+    # shellcheck disable=SC2059  # フォーマットは lc_* が返す固定文字列（外部入力は流れない）
+    printf "$(_amc_reason size_lines '差分サイズ超過: %s 行（上限 %s）')\n" "$total" "$AUTO_MERGE_MAX_LINES" >&2
     return 1
   fi
   if [ "$file_count" -gt "$AUTO_MERGE_MAX_FILES" ]; then
-    echo "ファイル数超過: ${file_count}（上限 ${AUTO_MERGE_MAX_FILES}）" >&2
+    # shellcheck disable=SC2059
+    printf "$(_amc_reason size_files 'ファイル数超過: %s（上限 %s）')\n" "$file_count" "$AUTO_MERGE_MAX_FILES" >&2
     return 1
   fi
   return 0
@@ -83,12 +111,12 @@ check_size_from_data() {
 categorize_diff_lines_from_files() {
   local file_diff_list="$1"
   local prod_add=0 prod_del=0 td_add=0 td_del=0
-  while IFS=$'\t' read -r path adds dels; do
-    [ -z "$path" ] && continue
+  while IFS=$'\t' read -r file_path adds dels; do
+    [ -z "$file_path" ] && continue
     # 数値以外（空文字・null）を 0 に正規化
     [[ "$adds" =~ ^[0-9]+$ ]] || adds=0
     [[ "$dels" =~ ^[0-9]+$ ]] || dels=0
-    case "$path" in
+    case "$file_path" in
       */__tests__/*|*.test.*|*.spec.*|*.md)
         td_add=$((td_add + adds))
         td_del=$((td_del + dels))
@@ -117,16 +145,16 @@ categorize_diff_lines_from_files() {
 # （既存コードへの影響がゼロのため。公開コンテンツ・危険操作・レビュー等の他条件は免除しない）。
 new_app_candidate_from_files() {
   local file_status_list="$1"
-  local app="" path fstatus
+  local app="" file_path fstatus
   [ -z "$file_status_list" ] && return 1
-  while IFS=$'\t' read -r path fstatus; do
-    [ -z "$path" ] && continue
+  while IFS=$'\t' read -r file_path fstatus; do
+    [ -z "$file_path" ] && continue
     [ "$fstatus" = "added" ] || return 1
-    case "$path" in
+    case "$file_path" in
       apps/*/*) ;;
       *) return 1 ;;
     esac
-    local this="${path#apps/}"
+    local this="${file_path#apps/}"
     this="apps/${this%%/*}"
     if [ -z "$app" ]; then
       app="$this"
@@ -157,7 +185,7 @@ check_ci_fallback_from_data() {
   local name steps file
 
   if [ -z "$failing_jobs" ]; then
-    echo "failing check の情報が取得できないため CI 不発フォールバック不可（fail-closed）" >&2
+    printf '%s\n' "$(_amc_reason fb_no_info 'failing check の情報が取得できないため CI 不発フォールバック不可（fail-closed）')" >&2
     return 1
   fi
 
@@ -165,7 +193,8 @@ check_ci_fallback_from_data() {
     [ -z "$file" ] && continue
     case "$file" in
       .github/workflows/*)
-        echo "PR が .github/workflows/ を変更しているため CI 不発フォールバック不可（CI 定義は実 CI で検証必須）: $file" >&2
+        # shellcheck disable=SC2059
+      printf "$(_amc_reason fb_workflow 'PR が .github/workflows/ を変更しているため CI 不発フォールバック不可（CI 定義は実 CI で検証必須）: %s')\n" "$file" >&2
         return 1
         ;;
     esac
@@ -174,11 +203,13 @@ check_ci_fallback_from_data() {
   while IFS=$'\t' read -r name steps; do
     [ -z "$name" ] && continue
     if ! [[ "$steps" =~ ^[0-9]+$ ]]; then
-      echo "check '$name' の実行ステップ数が取得できないためフォールバック不可（fail-closed）" >&2
+      # shellcheck disable=SC2059
+      printf "$(_amc_reason fb_no_steps "check '%s' の実行ステップ数が取得できないためフォールバック不可（fail-closed）")\n" "$name" >&2
       return 1
     fi
     if [ "$steps" -gt 0 ]; then
-      echo "check '$name' は実行されて失敗しています（真の CI 失敗のためフォールバック不可）" >&2
+      # shellcheck disable=SC2059
+      printf "$(_amc_reason fb_real_fail "check '%s' は実行されて失敗しています（真の CI 失敗のためフォールバック不可）")\n" "$name" >&2
       return 1
     fi
   done <<< "$failing_jobs"
@@ -221,11 +252,13 @@ check_scope_from_files() {
   done <<< "$file_list"
 
   if [ "${#apps_touched[@]}" -gt 1 ]; then
-    echo "複数アプリ横断: ${apps_touched[*]}" >&2
+    # shellcheck disable=SC2059
+    printf "$(_amc_reason multi_app '複数アプリ横断: %s')\n" "${apps_touched[*]}" >&2
     return 1
   fi
   if [ "${#packages_touched[@]}" -gt 0 ]; then
-    echo "shared package 変更（複数アプリへの影響範囲）: packages/${packages_touched[*]}" >&2
+    # shellcheck disable=SC2059
+    printf "$(_amc_reason shared_pkg 'shared package 変更（複数アプリへの影響範囲）: packages/%s')\n" "${packages_touched[*]}" >&2
     return 1
   fi
   return 0
@@ -276,7 +309,8 @@ check_public_content_from_files() {
   done <<< "$file_list"
 
   if [ "${#public_files[@]}" -gt 0 ]; then
-    echo "公開コンテンツへの変更を検出: ${public_files[*]}" >&2
+    # shellcheck disable=SC2059
+    printf "$(_amc_reason public_content '公開コンテンツへの変更を検出: %s')\n" "${public_files[*]}" >&2
     return 1
   fi
   return 0
@@ -297,17 +331,17 @@ check_public_content_from_files() {
 check_review_from_text() {
   local review_text="$1"
   if [ -z "$review_text" ]; then
-    echo "レビューコメントが PR に投稿されていません（/review 未実行）" >&2
+    printf '%s\n' "$(_amc_reason no_review 'レビューコメントが PR に投稿されていません（/review 未実行）')" >&2
     return 1
   fi
   # 旧形式（[Critical] ラベル / ### Critical 見出し）
   if printf '%s' "$review_text" | grep -qiE '(\[(Critical|Major)\]|###?[[:space:]]+(Critical|Major)\b)'; then
-    echo "/review に Critical / Major 指摘があります" >&2
+    printf '%s\n' "$(_amc_reason review_critical '/review に Critical / Major 指摘があります')" >&2
     return 1
   fi
   # 現行 4 軸表形式（| Critical | 95 | ... | 対応 |）の未解決行
   if _has_unresolved_critical_major_row "$review_text"; then
-    echo "/review の 4 軸表に未解決の Critical / Major 指摘があります" >&2
+    printf '%s\n' "$(_amc_reason review_unresolved '/review の 4 軸表に未解決の Critical / Major 指摘があります')" >&2
     return 1
   fi
   return 0
@@ -329,7 +363,7 @@ check_review_from_text() {
 #     ✅（完了/修正済み）・⏭️ 除外（80未満 = 誤検知フィルタ済み）・📌（別 Issue）。
 #   - `⏭️ スキップ（理由）` は **未解決として block**（#N 判断 2。review.md の定義上
 #     スキップ = 信頼度 80 以上の実在指摘を見送った状態であり、自動マージは 4 軸表の意味論に
-#     反する。正当なスキップは [manual-merge] で メンテナ マージに回すのが正道 = gate は緩和しない）。
+#     反する。正当なスキップは [manual-merge] で メンテナマージに回すのが正道 = gate は緩和しない）。
 #     対応列が ⏭️ のみで除外/スキップを判別できない場合もフェイルセーフで block（不明→block）。
 #   - 判定ステータス（A-1・check_review_status_from_text）を主ゲートとした二重化（defense in depth）。
 #     解決済み Critical をブロックせず auto-merge を無効化しないため、対応列を見る。
@@ -437,13 +471,13 @@ check_review_status_from_text() {
   case "$verdict" in
     pass) return 0 ;;
     要確認)
-      echo "/review の判定ステータスが『要確認』です（auto-merge ブロック）" >&2
+      printf '%s\n' "$(_amc_reason verdict_needs '/review の判定ステータスが『要確認』です（auto-merge ブロック）')" >&2
       return 1 ;;
     fail)
-      echo "/review の判定ステータスが『fail』です（auto-merge ブロック）" >&2
+      printf '%s\n' "$(_amc_reason verdict_fail '/review の判定ステータスが『fail』です（auto-merge ブロック）')" >&2
       return 1 ;;
     *)
-      echo "/review の判定ステータスを検出できません（不明のため auto-merge ブロック）" >&2
+      printf '%s\n' "$(_amc_reason verdict_unknown '/review の判定ステータスを検出できません（不明のため auto-merge ブロック）')" >&2
       return 1 ;;
   esac
 }
@@ -472,19 +506,23 @@ check_dangerous_from_data() {
     [ -z "$file" ] && continue
     case "$file" in
       migrations/*|*/migrations/*)
-        echo "migration ファイル変更: $file" >&2
+        # shellcheck disable=SC2059
+      printf "$(_amc_reason danger_migration 'migration ファイル変更: %s')\n" "$file" >&2
         return 1
         ;;
       *.sql)
-        echo "SQL ファイル変更: $file" >&2
+        # shellcheck disable=SC2059
+      printf "$(_amc_reason danger_sql 'SQL ファイル変更: %s')\n" "$file" >&2
         return 1
         ;;
       */auth/*|*/auth.ts|*/middleware.ts)
-        echo "認証関連ファイル変更: $file" >&2
+        # shellcheck disable=SC2059
+      printf "$(_amc_reason danger_auth '認証関連ファイル変更: %s')\n" "$file" >&2
         return 1
         ;;
       */stripe/*|*/payment/*|*/billing/*)
-        echo "課金関連ファイル変更: $file" >&2
+        # shellcheck disable=SC2059
+      printf "$(_amc_reason danger_billing '課金関連ファイル変更: %s')\n" "$file" >&2
         return 1
         ;;
     esac
@@ -493,7 +531,7 @@ check_dangerous_from_data() {
   # PR 本文キーワード
   if [ -n "$pr_body" ]; then
     if printf '%s' "$pr_body" | grep -qiE '(DROP TABLE|DELETE FROM|TRUNCATE|rm -rf|force-delete)'; then
-      echo "PR 本文に危険操作キーワードを検出" >&2
+      printf '%s\n' "$(_amc_reason danger_keyword 'PR 本文に危険操作キーワードを検出')" >&2
       return 1
     fi
   fi
@@ -512,7 +550,7 @@ check_dangerous_from_data() {
 check_optout_from_body() {
   local pr_body="$1"
   if printf '%s' "$pr_body" | grep -qE '^[[:space:]]*\[manual-merge\][[:space:]]*$'; then
-    echo "[manual-merge] タグが PR 本文にあるため メンテナ 手動マージ待ち" >&2
+    printf '%s\n' "$(_amc_reason optout '[manual-merge] タグが PR 本文にあるため メンテナ手動マージ待ち')" >&2
     return 1
   fi
   return 0
@@ -524,7 +562,7 @@ check_optout_from_body() {
 check_draft_from_flag() {
   local is_draft="$1"
   if [ "$is_draft" = "true" ]; then
-    echo "PR が draft 状態のためマージ不可" >&2
+    printf '%s\n' "$(_amc_reason draft 'PR が draft 状態のためマージ不可')" >&2
     return 1
   fi
   return 0
@@ -633,7 +671,7 @@ reduce_e2e_statuses() {
 #   actions_usage_pct: GitHub Actions 月次利用率（整数文字列、未取得は空）
 # Returns: 0=OK（マージ可）, 1=block（理由を stderr）
 #
-# graceful rollout（{ISSUE-ID} Phase 1 コメント / メンテナ 承認）:
+# graceful rollout（{ISSUE-ID} Phase 1 コメント / メンテナ承認）:
 #   L1 spec を持つアプリ（= enforced）にのみ e2e CI 結果を要求する。
 #   spec 未整備アプリの UI 変更は block しない（他セッションの作業を巻き込まないため）。
 #   全フロントアプリの L1 spec が揃えば自然に全 PR が enforced になる。
@@ -669,9 +707,10 @@ check_e2e_from_data() {
       return 0
       ;;
     skipped)
-      # 利用量 90% 超による自動 skip かつ UI 変更あり → メンテナ 手動マージ待ち
+      # 利用量 90% 超による自動 skip かつ UI 変更あり → メンテナ手動マージ待ち
       if [ -n "$usage" ] && [[ "$usage" =~ ^[0-9]+$ ]] && [ "$usage" -ge 90 ]; then
-        echo "e2e CI が GitHub Actions 利用量 ${usage}% 超で自動 skip。UI 変更を含むため メンテナ 手動マージ待ち" >&2
+        # shellcheck disable=SC2059
+    printf "$(_amc_reason e2e_usage 'e2e CI が GitHub Actions 利用量 %s%% 超で自動 skip。UI 変更を含むため メンテナ手動マージ待ち')\n" "$usage" >&2
         return 1
       fi
       # path filter skip 等の通常 skip → OK（fail-safe = OK）
@@ -684,15 +723,15 @@ check_e2e_from_data() {
     error)
       # e2e CI status を確認できない（gh 取得失敗等）。enforced アプリでは
       # fail-open を避けて block する（Codex 指摘）。確認不能を黙って通さない。
-      echo "e2e CI 状態を確認できません（gh 取得失敗等）。UI 変更を含むため メンテナ 手動マージ待ち" >&2
+      printf '%s\n' "$(_amc_reason e2e_unknown 'e2e CI 状態を確認できません（gh 取得失敗等）。UI 変更を含むため メンテナ手動マージ待ち')" >&2
       return 1
       ;;
     cancelled)
-      echo "e2e CI cancelled（最新 push の concurrency cancel 想定）。次回ジョブ完了を待機" >&2
+      printf '%s\n' "$(_amc_reason e2e_cancelled 'e2e CI cancelled（最新 push の concurrency cancel 想定）。次回ジョブ完了を待機')" >&2
       return 1
       ;;
     fail)
-      echo "e2e CI 失敗。UI 変更を含むため自動マージ不可" >&2
+      printf '%s\n' "$(_amc_reason e2e_fail 'e2e CI 失敗。UI 変更を含むため自動マージ不可')" >&2
       return 1
       ;;
     *)
@@ -920,13 +959,16 @@ evaluate_from_data() {
   local new_app_exempt="${14:-0}"
   local prod_total=$((additions + deletions))
   local td_total=$((td_additions + td_deletions))
-  local size_label="1. 差分サイズ ≤ 500 行 / ≤ 10 ファイル"
+  local _amc_l; _amc_l="$(_amc_lang)"
+  local size_label; size_label="$(_amc_cond size_default "$_amc_l" "1. 差分サイズ ≤ 500 行 / ≤ 10 ファイル")"
   if [ "$td_total" -gt 0 ]; then
     # 実コード行の実数値も括弧内に含めて検証時の透明性を上げる（{ISSUE-ID} m3）
-    size_label="1. 実コード差分 ${prod_total} 行 / 上限 500 行 / ≤ 10 ファイル（テスト/.md ${td_total} 行を除外）"
+    # shellcheck disable=SC2059  # フォーマットは lc_* が返す固定文字列（外部入力は流れない）
+    size_label="$(printf "$(_amc_size_fmt excluded "$_amc_l" '1. 実コード差分 %s 行 / 上限 500 行 / ≤ 10 ファイル（テスト/.md %s 行を除外）')" "$prod_total" "$td_total")"
   fi
   if [ "$new_app_exempt" = "1" ]; then
-    size_label="1. 差分サイズ（新規アプリ初期 PR につき上限免除: 実コード ${prod_total} 行 / ${file_count} ファイル）"
+    # shellcheck disable=SC2059
+    size_label="$(printf "$(_amc_size_fmt new_app "$_amc_l" '1. 差分サイズ（新規アプリ初期 PR につき上限免除: 実コード %s 行 / %s ファイル）')" "$prod_total" "$file_count")"
   fi
 
   local results=()
@@ -960,23 +1002,23 @@ evaluate_from_data() {
     _eval "$size_label" \
       check_size_from_data "$additions" "$deletions" "$file_count"
   fi
-  _eval "2. スコープ（infra / 単一内部アプリ）" \
+  _eval "$(_amc_cond scope "$_amc_l" "2. スコープ（infra / 単一内部アプリ）")" \
     check_scope_from_files "$file_list"
-  _eval "3. 公開コンテンツ非該当" \
+  _eval "$(_amc_cond public "$_amc_l" "3. 公開コンテンツ非該当")" \
     check_public_content_from_files "$file_list"
-  _eval "4. レビュー判定 pass・Critical/Major ゼロ" \
+  _eval "$(_amc_cond review "$_amc_l" "4. レビュー判定 pass・Critical/Major ゼロ")" \
     check_review_gate_from_text "$review_text"
-  _eval "5. 危険操作なし" \
+  _eval "$(_amc_cond danger "$_amc_l" "5. 危険操作なし")" \
     check_dangerous_from_data "$file_list" "$pr_body"
-  _eval "6. [manual-merge] タグなし" \
+  _eval "$(_amc_cond manual "$_amc_l" "6. [manual-merge] タグなし")" \
     check_optout_from_body "$pr_body"
-  _eval "7. draft でない" \
+  _eval "$(_amc_cond draft "$_amc_l" "7. draft でない")" \
     check_draft_from_flag "$is_draft"
 
   # 8. UI 変更時 e2e（L1 golden path）— {ISSUE-ID}。UI 変更なしは N/A で常に OK。
-  local e2e_label="8. UI 変更時 e2e（L1 golden path）"
+  local e2e_label; e2e_label="$(_amc_cond e2e "$_amc_l" "8. UI 変更時 e2e（L1 golden path）")"
   if [ -z "$e2e_ui_apps" ]; then
-    e2e_label="8. UI 変更時 e2e（UI 変更なし・N/A）"
+    e2e_label="$(_amc_cond e2e_na "$_amc_l" "8. UI 変更時 e2e（UI 変更なし・N/A）")"
   fi
   _eval "$e2e_label" \
     check_e2e_from_data "$e2e_ui_apps" "$e2e_spec_apps" "$e2e_ci_status" "$e2e_usage"
@@ -989,32 +1031,33 @@ evaluate_from_data() {
   # 不在時（= 配布先）は条件 9 自体を評価せず N/A 扱いにする。cc-autoship の利用者は
   # `[self-improve]` マーカーも Tier P 保護パスも持たないため、この条件は元々 N/A。
   if declare -f check_self_improve_protected_paths_from_data >/dev/null 2>&1; then
-    local self_improve_label="9. self-improve 保護パス非該当（[self-improve] でない・N/A）"
+    local self_improve_label; self_improve_label="$(_amc_cond selfimp_na "$_amc_l" "9. self-improve 保護パス非該当（[self-improve] でない・N/A）")"
     if has_self_improve_marker_from_body "$pr_body"; then
-      self_improve_label="9. [self-improve] PR は保護パス非該当"
+      self_improve_label="$(_amc_cond selfimp "$_amc_l" "9. [self-improve] PR は保護パス非該当")"
     fi
     _eval "$self_improve_label" \
       check_self_improve_protected_paths_from_data "$file_list" "$pr_body"
   fi
 
   if [ "$skipped" -eq 1 ]; then
-    echo "## 🤖 /auto-merge 判定結果: ❌ 自動マージ不可"
+    printf '%s\n' "$(_amc_head ng "$_amc_l" "## 🤖 /auto-merge 判定結果: ❌ 自動マージ不可")"
     echo
-    echo "| 条件 | 結果 |"
+    printf '%s\n' "$(_amc_cond table_header "$_amc_l" "| 条件 | 結果 |")"
     echo "|------|------|"
     printf '%s\n' "${results[@]}"
     echo
-    echo "**結論**: ${first_failure}。メンテナ の手動マージが必要です。"
+    # shellcheck disable=SC2059  # フォーマットは lc_* が返す固定文字列（外部入力は流れない）
+    printf "$(_amc_concl ng "$_amc_l" '**結論**: %s。メンテナの手動マージが必要です。')\n" "$first_failure"
     return 1
   fi
 
-  echo "## 🤖 /auto-merge 判定結果: ✅ 自動マージ可"
+  printf '%s\n' "$(_amc_head ok "$_amc_l" "## 🤖 /auto-merge 判定結果: ✅ 自動マージ可")"
   echo
-  echo "| 条件 | 結果 |"
+  printf '%s\n' "$(_amc_cond table_header "$_amc_l" "| 条件 | 結果 |")"
   echo "|------|------|"
   printf '%s\n' "${results[@]}"
   echo
-  echo "CI 完了を待って自動マージします。"
+  printf '%s\n' "$(_amc_concl ok "$_amc_l" "CI 完了を待って自動マージします。")"
   return 0
 }
 
@@ -1062,6 +1105,7 @@ extract_latest_review_from_pr_data() {
                  or (.authorAssociation == "COLLABORATOR"))
         | select(.body | test("<!-- codex-secondary-review:") | not)
         | select(.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*レビュー指摘修正結果") | not)
+        | select(.body | test("<!--[ \t]*review-fix-result[ \t]*-->") | not)
         | select((.body | test("(^|\n)[ \t>]*##[ \t]*[^#\n]*(レビュー結果|レビュー指摘|一次レビュー)"))
                  or (.body | test("<!--[ \t]*review-verdict:[ \t]*(pass|needs-review|fail)[ \t]*-->")))
       ] | last | .body // ""'

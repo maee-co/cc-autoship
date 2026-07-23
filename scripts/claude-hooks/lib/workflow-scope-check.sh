@@ -24,7 +24,7 @@
 #   （PR #N の ui-change-detect.sh 修正と同じ方針）
 
 # このファイルを直接実行した場合のみ strict mode を有効化する（source 時は親の設定を尊重）
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" == "${0}" ]]; then
   set -uo pipefail
 fi
 
@@ -34,11 +34,11 @@ fi
 # 注: サブディレクトリ (.github/workflows/subdir/foo.yml) は対象外（GitHub Actions の仕様上、
 #     workflow ファイルは workflows/ 直下のみが認識される）
 is_workflow_file() {
-  local path="${1:-}"
-  case "$path" in
+  local file_path="${1:-}"
+  case "$file_path" in
     .github/workflows/*.yml|.github/workflows/*.yaml)
-      # サブディレクトリを除外（パターン中の * が / を含む path にもマッチしてしまうため）
-      case "$path" in
+      # サブディレクトリを除外（パターン中の * が / を含む file_path にもマッチしてしまうため）
+      case "$file_path" in
         .github/workflows/*/*) return 1 ;;
         *) return 0 ;;
       esac
@@ -51,9 +51,9 @@ is_workflow_file() {
 # 1 件でも workflow ファイルが含まれていれば 0 を返す
 # 戻り値: 0 = 検知 / 1 = なし
 has_new_workflow_in_files() {
-  while IFS= read -r path; do
-    [ -z "$path" ] && continue
-    if is_workflow_file "$path"; then
+  while IFS= read -r file_path; do
+    [ -z "$file_path" ] && continue
+    if is_workflow_file "$file_path"; then
       return 0
     fi
   done
@@ -78,10 +78,10 @@ get_new_workflow_files_from_pr() {
   # --paginate でファイル数 > 30 でも全件取得
   gh api "repos/$repo/pulls/$pr/files" --paginate \
     --jq '.[] | select(.status == "added") | .filename' 2>/dev/null \
-    | while IFS= read -r path; do
-        [ -z "$path" ] && continue
-        if is_workflow_file "$path"; then
-          printf '%s\n' "$path"
+    | while IFS= read -r file_path; do
+        [ -z "$file_path" ] && continue
+        if is_workflow_file "$file_path"; then
+          printf '%s\n' "$file_path"
         fi
       done
 }

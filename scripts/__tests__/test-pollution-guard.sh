@@ -164,6 +164,24 @@ rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
 assert "6 桁 hex 色はスルー (exit 0)" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
 
 # ─────────────────────────────────────────────
+echo "[8b] MAE-954: 5 桁以上の内部 #番号（{2,4} 上限では未検出だった）を検出"
+
+tmpdir=$(make_tmpdir)
+printf 'see%s12345 for details\n' " #" > "$tmpdir/rules/five_digit.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "' #12345'（5 桁・半角スペース前置）を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+printf 'gate は最新のみ信頼・%s12345 判断 1\n' "$HASH" > "$tmpdir/rules/five_digit_fullwidth.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "・#12345（5 桁・全角中黒前置）を検出 (exit 1)" "$([ "$rc" -eq 1 ] && echo 0 || echo 1)"
+
+tmpdir=$(make_tmpdir)
+printf 'color: %s112233; background: %sf0f0f0\n' "$HASH" "$HASH" > "$tmpdir/rules/color_2to5.md"
+rc=$(run_guard_rc "$tmpdir"); rm -rf "$tmpdir"
+assert "{2,5} 上限でも 6 桁 hex 色はスルー (exit 0)" "$([ "$rc" -eq 0 ] && echo 0 || echo 1)"
+
+# ─────────────────────────────────────────────
 echo "[9] #1814: private repo URL（github.com/maee-co/core）を検出"
 
 tmpdir=$(make_tmpdir)
